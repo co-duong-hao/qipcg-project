@@ -1,0 +1,26 @@
+# Dataset is downloaded or copied separately.
+TheVGLC/
+
+# Experiment outputs and generated artifacts.
+experiments/output*/
+experiments/output_fisat*/
+experiments/output_q2*/
+experiments/q2_perf/
+experiments/q2_smoke/
+experiments/smoke*/
+
+# Python cache.
+__pycache__/
+experiments/__pycache__/
+*.pyc
+
+# Paper and internal review files are intentionally not published here.
+paper/
+Phieu_phan_bien_QI-PCG_FISAT2026.md
+Danh_sach_da_sua_QI-PCG_FISAT2026.html
+
+# Logs and local OS files.
+*.log
+*.err.log
+.DS_Store
+Thumbs.db
