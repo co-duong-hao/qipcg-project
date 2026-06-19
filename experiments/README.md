@@ -39,12 +39,17 @@ The fair-budget main configuration uses:
 - GA population 8, generations 2, total 24 fitness evaluations
 - SA steps 23, total 24 fitness evaluations
 - ablation: 6 variants x 5 K values x 200 samples per cell x 2 datasets
+- reference configuration: `experiments/fisat_main_config.json`
+
+Content metrics are seeded and should be reproducible with the same dataset and
+commit. `generation_time` is machine-dependent and should be compared as a
+trend only.
 
 Smoke validation command:
 
 ```powershell
 & 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\zelda_pcg_experiment.py --out-dir experiments\output_fisat_fair_smoke --rooms-per-method 2 --seeds 1 --ablation-rooms-per-cell 1 --stat-permutations 19
-& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fair_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fair_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1 --skip-paper
 ```
 
 Full final run command:
@@ -62,5 +67,5 @@ Regenerate vector paper figures after a full run:
 Full final validation command:
 
 ```powershell
-& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```

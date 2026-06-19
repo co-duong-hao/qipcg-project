@@ -76,14 +76,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def make_canvas(path: Path, title: str, y_label: str, x_label: str = "") -> tuple[canvas.Canvas, tuple[float, float, float, float]]:
+def make_canvas(
+    path: Path,
+    title: str,
+    y_label: str,
+    x_label: str = "",
+    *,
+    y_label_mode: str = "vertical",
+) -> tuple[canvas.Canvas, tuple[float, float, float, float]]:
     path.parent.mkdir(parents=True, exist_ok=True)
     c = canvas.Canvas(str(path), pagesize=(PAGE_W, PAGE_H))
     c.setTitle(title)
     c.setFont("Helvetica-Bold", 13)
     c.drawCentredString(PAGE_W / 2, PAGE_H - 24, title)
     c.setFont("Helvetica", 9)
-    c.drawString(14, PAGE_H - TOP - 4, y_label)
+    if y_label_mode == "horizontal":
+        c.drawString(18, PAGE_H - TOP + 8, y_label)
+    else:
+        c.saveState()
+        c.translate(18, (PAGE_H - TOP + BOTTOM) / 2)
+        c.rotate(90)
+        c.drawCentredString(0, 0, y_label)
+        c.restoreState()
     if x_label:
         c.drawCentredString(PAGE_W / 2, 22, x_label)
     plot = (LEFT, BOTTOM, PAGE_W - RIGHT, PAGE_H - TOP)
@@ -120,10 +134,20 @@ def draw_y_ticks(
     c.setStrokeColor(colors.black)
 
 
-def bar_chart(path: Path, rows: pd.DataFrame, dataset: str, metric: str, *, log: bool = False, zoom: tuple[float, float] | None = None) -> None:
+def bar_chart(
+    path: Path,
+    rows: pd.DataFrame,
+    dataset: str,
+    metric: str,
+    *,
+    log: bool = False,
+    zoom: tuple[float, float] | None = None,
+    show_error_bars: bool = True,
+    y_label_mode: str = "vertical",
+) -> None:
     title = f"{DATASET_LABELS[dataset]}: {METRIC_LABELS[metric]}"
     y_label = METRIC_LABELS[metric] + (" (log scale)" if log else "")
-    c, plot = make_canvas(path, title, y_label, "Method")
+    c, plot = make_canvas(path, title, y_label, "Method", y_label_mode=y_label_mode)
     left, bottom, right, top = plot
     rows = rows[(rows["dataset"] == dataset) & (rows["seed"].astype(str) == "ALL")]
     rows = rows[rows["method"].isin(METHOD_ORDER)].set_index("method")
@@ -157,7 +181,8 @@ def bar_chart(path: Path, rows: pd.DataFrame, dataset: str, metric: str, *, log:
         y = bottom + (min(max(val, y_min), y_max) - y_min) / span * (top - bottom)
         c.setFillColor(COLORS[method])
         c.rect(x, bottom, bar_w, max(0.5, y - bottom), fill=1, stroke=0)
-        draw_error_bar(c, x + bar_w / 2, raw, stds[idx], y_min, y_max, plot, log)
+        if show_error_bars:
+            draw_error_bar(c, x + bar_w / 2, raw, stds[idx], y_min, y_max, plot, log)
         c.setFillColor(colors.black)
         c.setFont("Helvetica", 8)
         c.drawCentredString(x + bar_w / 2, y + 5, fmt_value(raw))
@@ -202,13 +227,24 @@ def fmt_value(value: float) -> str:
 def scatter_chart(path: Path, rows: pd.DataFrame, dataset: str) -> None:
     title = f"{DATASET_LABELS[dataset]}: novelty vs. style similarity"
     c, plot = make_canvas(path, title, "Style similarity", "Novelty")
+    plot = (LEFT, BOTTOM, PAGE_W - 160, PAGE_H - TOP)
     left, bottom, right, top = plot
+    old_right = PAGE_W - RIGHT
+    c.setFillColor(colors.white)
+    c.rect(right + 1, bottom - 5, old_right - right + 10, top - bottom + 10, fill=1, stroke=0)
+    c.rect(0, 0, PAGE_W, 35, fill=1, stroke=0)
+    draw_axes(c, plot)
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica", 9)
+    c.drawCentredString((left + right) / 2, 22, "Novelty")
     rows = rows[(rows["dataset"] == dataset) & (rows["seed"].astype(str) == "ALL")]
     rows = rows[rows["method"].isin(METHOD_ORDER)]
     x_vals = rows["novelty_mean"].astype(float).tolist()
     y_vals = rows["style_similarity_mean"].astype(float).tolist()
-    x_min, x_max = max(0.0, min(x_vals) - 0.03), min(1.0, max(x_vals) + 0.04)
-    y_min, y_max = max(0.0, min(y_vals) - 0.04), min(1.0, max(y_vals) + 0.03)
+    x_pad = max(0.025, (max(x_vals) - min(x_vals)) * 0.10)
+    y_pad = max(0.025, (max(y_vals) - min(y_vals)) * 0.10)
+    x_min, x_max = max(0.0, min(x_vals) - x_pad), min(1.0, max(x_vals) + x_pad)
+    y_min, y_max = max(0.0, min(y_vals) - y_pad), min(1.0, max(y_vals) + y_pad)
     draw_y_ticks(c, plot, [y_min + i * (y_max - y_min) / 4 for i in range(5)], y_min, y_max, lambda v: f"{v:.2f}")
     c.setFont("Helvetica", 8)
     for i in range(5):
@@ -219,19 +255,47 @@ def scatter_chart(path: Path, rows: pd.DataFrame, dataset: str) -> None:
         method = row["method"]
         x = left + (float(row["novelty_mean"]) - x_min) / (x_max - x_min) * (right - left)
         y = bottom + (float(row["style_similarity_mean"]) - y_min) / (y_max - y_min) * (top - bottom)
-        radius = 4.8 if method == "quantum_inspired" else 3.8
+        radius = 4.8 if method == "quantum_inspired" else 4.2
         c.setFillColor(COLORS[method])
         c.circle(x, y, radius, fill=1, stroke=0)
+    legend_x = right + 28
+    legend_y = bottom + (top - bottom) * 0.56
+    row_gap = 22
+    c.setFont("Helvetica", 9)
+    for idx, method in enumerate(METHOD_ORDER):
+        lx = legend_x
+        ly = legend_y - idx * row_gap
+        c.setFillColor(COLORS[method])
+        c.rect(lx, ly, 7, 7, fill=1, stroke=0)
         c.setFillColor(colors.black)
-        c.setFont("Helvetica", 8)
-        c.drawString(x + 6, y - 3, METHOD_LABELS[method])
+        c.drawString(lx + 13, ly, METHOD_LABELS[method])
     c.save()
+
+
+def apply_right_legend_layout(
+    c: canvas.Canvas,
+    x_label: str,
+    *,
+    legend_width: float = 132,
+) -> tuple[float, float, float, float]:
+    plot = (LEFT, BOTTOM, PAGE_W - legend_width - RIGHT, PAGE_H - TOP)
+    left, bottom, right, top = plot
+    old_right = PAGE_W - RIGHT
+    c.setFillColor(colors.white)
+    c.rect(right + 1, bottom - 5, old_right - right + 10, top - bottom + 10, fill=1, stroke=0)
+    c.rect(0, 0, PAGE_W, 35, fill=1, stroke=0)
+    draw_axes(c, plot)
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica", 9)
+    c.drawCentredString((left + right) / 2, 22, x_label)
+    return plot
 
 
 def ablation_curve(path: Path, rows: pd.DataFrame, dataset: str, metric: str, *, log: bool = False) -> None:
     title = f"{DATASET_LABELS[dataset]}: ablation {METRIC_LABELS[metric].lower()}"
     y_label = METRIC_LABELS[metric] + (" (log scale)" if log else "")
     c, plot = make_canvas(path, title, y_label, "Candidate budget K")
+    plot = apply_right_legend_layout(c, "Candidate budget K")
     left, bottom, right, top = plot
     rows = rows[rows["dataset"] == dataset]
     values = rows[f"{metric}_mean"].astype(float).tolist()
@@ -271,14 +335,23 @@ def ablation_curve(path: Path, rows: pd.DataFrame, dataset: str, metric: str, *,
         c.setFillColor(COLORS[variant])
         for x, y in points:
             c.circle(x, y, 2.8, fill=1, stroke=0)
-    draw_legend(c, PAGE_W - 134, PAGE_H - 78, VARIANT_ORDER, VARIANT_LABELS)
+    draw_legend(c, right + 28, PAGE_H - 92, VARIANT_ORDER, VARIANT_LABELS, font_size=8.5, row_gap=15)
     c.save()
 
 
-def draw_legend(c: canvas.Canvas, x: float, y: float, keys: list[str], labels: dict[str, str]) -> None:
-    c.setFont("Helvetica", 7.5)
+def draw_legend(
+    c: canvas.Canvas,
+    x: float,
+    y: float,
+    keys: list[str],
+    labels: dict[str, str],
+    *,
+    font_size: float = 7.5,
+    row_gap: float = 13,
+) -> None:
+    c.setFont("Helvetica", font_size)
     for idx, key in enumerate(keys):
-        yy = y - idx * 13
+        yy = y - idx * row_gap
         c.setFillColor(COLORS[key])
         c.rect(x, yy - 2, 7, 7, fill=1, stroke=0)
         c.setFillColor(colors.black)
@@ -297,9 +370,29 @@ def main() -> int:
     targets = [figure_dir, paper_figures]
     for target in targets:
         for dataset in ["zelda", "loderunner"]:
-            bar_chart(target / f"{dataset}_playability.pdf", summary, dataset, "playability")
-            bar_chart(target / f"{dataset}_generation_time_log.pdf", summary, dataset, "generation_time", log=True)
-            bar_chart(target / f"{dataset}_style_zoom.pdf", summary, dataset, "style_similarity", zoom=(0.94, 0.985))
+            bar_chart(
+                target / f"{dataset}_playability.pdf",
+                summary,
+                dataset,
+                "playability",
+                show_error_bars=False,
+            )
+            bar_chart(
+                target / f"{dataset}_generation_time_log.pdf",
+                summary,
+                dataset,
+                "generation_time",
+                log=True,
+                show_error_bars=False,
+            )
+            bar_chart(
+                target / f"{dataset}_style_zoom.pdf",
+                summary,
+                dataset,
+                "style_similarity",
+                zoom=(0.94, 0.985),
+                show_error_bars=False,
+            )
             scatter_chart(target / f"{dataset}_novelty_style.pdf", summary, dataset)
             ablation_curve(target / f"{dataset}_ablation_novelty.pdf", ablation, dataset, "novelty")
             ablation_curve(target / f"{dataset}_ablation_pattern.pdf", ablation, dataset, "pattern_similarity_2x2")

@@ -39,7 +39,7 @@ Smoke test dùng để kiểm tra code + dataset + output có chạy được kh
 Validate smoke output:
 
 ```powershell
-& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fair_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fair_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1 --skip-paper
 ```
 
 ### Nếu máy khác không có Python bundled
@@ -48,7 +48,7 @@ Dùng Python đã cài trên máy:
 
 ```powershell
 python experiments\zelda_pcg_experiment.py --out-dir experiments\output_fisat_fair_smoke --rooms-per-method 2 --seeds 1 --ablation-rooms-per-cell 1 --stat-permutations 19
-python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fair_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1
+python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fair_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1 --skip-paper
 ```
 
 Nếu lệnh `python` không chạy, thử:
@@ -60,6 +60,11 @@ py experiments\zelda_pcg_experiment.py --out-dir experiments\output_fisat_fair_s
 ## Full run
 
 Chỉ chạy khi smoke test pass. Full run có thể mất lâu.
+File cấu hình chuẩn để đối chiếu nằm ở:
+
+```text
+experiments/fisat_main_config.json
+```
 
 ```powershell
 python experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 10 --ablation-rooms-per-cell 200 --stat-permutations 999 --out-dir experiments\output_fisat_main
@@ -74,7 +79,7 @@ python experiments\make_vector_figures.py --out-dir experiments\output_fisat_mai
 Validate full output:
 
 ```powershell
-python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200
+python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 ## Kết quả cần kiểm tra
@@ -131,6 +136,7 @@ pip install numpy pandas Pillow reportlab pypdf
 | Tái tạo số liệu trong paper | Full run |
 | Sinh lại ảnh vector cho paper | `make_vector_figures.py` |
 | Kiểm tra output có đủ rows/files không | `validate_q2_outputs.py` |
+| Kiểm tra đúng cấu hình paper không | `validate_q2_outputs.py --expect-standard-config` |
 
 ## Lưu ý
 
@@ -138,3 +144,5 @@ pip install numpy pandas Pillow reportlab pypdf
 - Không đổi tên folder `TheVGLC`, `The Legend of Zelda`, hoặc `Lode Runner`.
 - Nếu chỉ muốn xem kết quả hiện có, không cần chạy full run lại; mở `experiments/output_fisat_main/`.
 - Nếu full run bị dừng giữa chừng, nên chạy lại với `--out-dir` mới để tránh lẫn output cũ.
+- Các metric nội dung có seed cố định nên có thể tái lập nếu cùng dataset, cùng commit, cùng command.
+- `generation_time` phụ thuộc CPU/môi trường máy, nên không so khớp tuyệt đối giữa các máy.

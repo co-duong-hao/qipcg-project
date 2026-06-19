@@ -13,6 +13,7 @@ experiments/smoke*/
 __pycache__/
 experiments/__pycache__/
 *.pyc
+tmp/
 
 # Paper and internal review files are intentionally not published here.
 paper/

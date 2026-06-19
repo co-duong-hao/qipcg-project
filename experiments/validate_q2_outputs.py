@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -12,6 +13,41 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = ROOT / "experiments" / "output_fisat_main"
 PAPER = ROOT / "paper" / "q2_next.tex"
 FIGURES = ROOT / "paper" / "q2_figures"
+
+STANDARD_MAIN_CONFIG = {
+    "datasets": ["zelda", "loderunner"],
+    "rooms_per_method": 500,
+    "seeds": 10,
+    "seed_start": 42,
+    "split_seed": 2026,
+    "train_ratio": 0.8,
+    "target_difficulty": 0.5,
+    "methods": [
+        "uniform_random",
+        "dataset_prior_random",
+        "positional_prior_random",
+        "quantum_inspired",
+        "genetic_algorithm",
+        "simulated_annealing",
+    ],
+    "k": 24,
+    "quantum_population": 8,
+    "quantum_iterations": 3,
+    "quantum_eta": 0.18,
+    "quantum_min_prob": 0.005,
+    "quantum_prior_anchor": 0.05,
+    "novelty_weight": 0.0,
+    "ga_population": 8,
+    "ga_generations": 2,
+    "mutation_rate": 0.03,
+    "sa_steps": 23,
+    "stat_permutations": 999,
+}
+
+STANDARD_ABLATION_CONFIG = {
+    "ablation_rooms_per_cell": 200,
+    "k_values": [8, 16, 24, 32, 64],
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -26,8 +62,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-reference", type=int)
     parser.add_argument("--expected-ablation-rows", type=int)
     parser.add_argument("--expected-ablation-cell-n", type=int)
+    parser.add_argument(
+        "--expect-standard-config",
+        action="store_true",
+        help="Check run_config_main.json and run_config_ablation.json against the FISAT paper configuration.",
+    )
     parser.add_argument("--skip-paper", action="store_true")
     return parser.parse_args()
+
+
+def load_json(path: Path) -> dict:
+    require(path.exists(), f"Missing config file: {path}")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def require_config_values(actual: dict, expected: dict, name: str) -> None:
+    for key, expected_value in expected.items():
+        require(key in actual, f"{name} missing config key: {key}")
+        require(
+            actual[key] == expected_value,
+            f"{name} config mismatch for {key}: expected {expected_value!r}, got {actual[key]!r}",
+        )
 
 
 def main() -> int:
@@ -77,6 +132,12 @@ def main() -> int:
                 f"Ablation cell n should be exactly {args.expected_ablation_cell_n}",
             )
 
+    if args.expect_standard_config:
+        run_config_main = load_json(out_dir / "run_config_main.json")
+        run_config_ablation = load_json(out_dir / "run_config_ablation.json")
+        require_config_values(run_config_main, STANDARD_MAIN_CONFIG, "run_config_main.json")
+        require_config_values(run_config_ablation, STANDARD_ABLATION_CONFIG, "run_config_ablation.json")
+
     if not args.skip_paper:
         require(PAPER.exists(), f"Missing paper: {PAPER}")
         tex = PAPER.read_text(encoding="utf-8")
@@ -89,6 +150,9 @@ def main() -> int:
     print("Experiment validation passed")
     print(f"detail_rows={len(detail)} generated={generated} reference={reference}")
     print(f"summary_rows={len(summary)} statistical_tests={len(tests)} p_value_nan=0")
+    if args.expect_standard_config:
+        print("standard_config=passed")
+    print("note=generation_time metrics are machine-dependent and should not be compared byte-for-byte across computers")
     print(f"output_dir={out_dir}")
     return 0
 

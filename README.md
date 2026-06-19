@@ -50,6 +50,9 @@ python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fai
 Only run the full experiment after the smoke test passes. This can take a long
 time.
 
+The paper configuration is recorded in `experiments/fisat_main_config.json`.
+Use the command below unchanged when trying to reproduce the paper tables.
+
 ```powershell
 python experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 10 --ablation-rooms-per-cell 200 --stat-permutations 999 --out-dir experiments\output_fisat_main
 ```
@@ -57,8 +60,12 @@ python experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --rooms-p
 Validate the full output:
 
 ```powershell
-python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --skip-paper
+python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```
+
+Most content metrics should be reproducible with the same dataset, code commit,
+and command. `generation_time` is machine-dependent, so compare it as a trend
+only, not byte-for-byte across different computers.
 
 ## Vector Figure Policy
 
@@ -105,14 +112,18 @@ Primary scripts:
 - experiments/zelda_pcg_experiment.py: runs the experiment pipeline
 - experiments/validate_q2_outputs.py: validates generated outputs
 - experiments/make_vector_figures.py: regenerates vector PDF figures from output CSVs
+- experiments/fisat_main_config.json: records the paper reproduction configuration
 
 Default workflow:
 1. Install dependencies from requirements.txt.
 2. Run smoke test first.
 3. Validate smoke output.
 4. Only run full experiment if smoke passes.
-5. If figures are needed for paper/report, generate vector PDF figures with experiments/make_vector_figures.py. Do not use PNG raster figures for final paper/report.
-6. Do not commit outputs, dataset, paper, or internal review notes.
+5. Validate full outputs with --expect-standard-config when reproducing paper numbers.
+6. If figures are needed for paper/report, generate vector PDF figures with experiments/make_vector_figures.py. Do not use PNG raster figures for final paper/report.
+7. Do not commit outputs, dataset, paper, or internal review notes.
+
+Timing columns are machine-dependent; do not expect generation_time values to match exactly across computers.
 
 When making changes, keep main runnable by smoke test and update README/guide if commands change.
 ```

@@ -1,0 +1,40 @@
+{
+  "datasets": [
+    "zelda",
+    "loderunner"
+  ],
+  "rooms_per_method": 500,
+  "seeds": 10,
+  "seed_start": 42,
+  "split_seed": 2026,
+  "train_ratio": 0.8,
+  "target_difficulty": 0.5,
+  "methods": [
+    "uniform_random",
+    "dataset_prior_random",
+    "positional_prior_random",
+    "quantum_inspired",
+    "genetic_algorithm",
+    "simulated_annealing"
+  ],
+  "k": 24,
+  "quantum_population": 8,
+  "quantum_iterations": 3,
+  "quantum_eta": 0.18,
+  "quantum_min_prob": 0.005,
+  "quantum_prior_anchor": 0.05,
+  "novelty_weight": 0.0,
+  "ga_population": 8,
+  "ga_generations": 2,
+  "mutation_rate": 0.03,
+  "sa_steps": 23,
+  "stat_permutations": 999,
+  "ablation_rooms_per_cell": 200,
+  "ablation_k_values": [
+    8,
+    16,
+    24,
+    32,
+    64
+  ]
+}
