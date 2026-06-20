@@ -63,6 +63,35 @@ Validate the full output:
 python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```
 
+## Optional Fair-Budget Sweeps
+
+The main table uses one fair budget point: 24 fitness evaluations for QI, GA,
+and SA. To reproduce the optional budget/novelty trade-off analysis without
+rerunning the main experiment, run sweeps only:
+
+```powershell
+python experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --seeds 10 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_fisat_main
+```
+
+This adds:
+
+```text
+combined_budget_sweep_detailed.csv
+combined_budget_sweep_summary.csv
+combined_novelty_sweep_detailed.csv
+combined_novelty_sweep_summary.csv
+```
+
+Budget sweep uses `8,16,24,32,64` fitness evaluations for QI/GA/SA. Novelty
+sweep uses novelty weights `0,25,50,100` at 24 evaluations.
+
+After running the optional sweeps on top of `output_fisat_main`, validate them
+with:
+
+```powershell
+python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 60000 --expected-novelty-sweep-rows 48000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
+```
+
 Most content metrics should be reproducible with the same dataset, code commit,
 and command. `generation_time` is machine-dependent, so compare it as a trend
 only, not byte-for-byte across different computers.
@@ -120,8 +149,9 @@ Default workflow:
 3. Validate smoke output.
 4. Only run full experiment if smoke passes.
 5. Validate full outputs with --expect-standard-config when reproducing paper numbers.
-6. If figures are needed for paper/report, generate vector PDF figures with experiments/make_vector_figures.py. Do not use PNG raster figures for final paper/report.
-7. Do not commit outputs, dataset, paper, or internal review notes.
+6. Run optional sweeps with --run-budget-sweep --run-novelty-sweep --sweep-only only when checking fair-budget and novelty-pressure analysis.
+7. If figures are needed for paper/report, generate vector PDF figures with experiments/make_vector_figures.py. Do not use PNG raster figures for final paper/report.
+8. Do not commit outputs, dataset, paper, or internal review notes.
 
 Timing columns are machine-dependent; do not expect generation_time values to match exactly across computers.
 

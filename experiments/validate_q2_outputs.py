@@ -62,6 +62,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-reference", type=int)
     parser.add_argument("--expected-ablation-rows", type=int)
     parser.add_argument("--expected-ablation-cell-n", type=int)
+    parser.add_argument("--expected-budget-sweep-rows", type=int)
+    parser.add_argument("--expected-novelty-sweep-rows", type=int)
+    parser.add_argument("--expected-sweep-cell-n", type=int)
     parser.add_argument(
         "--expect-standard-config",
         action="store_true",
@@ -130,6 +133,52 @@ def main() -> int:
             require(
                 set(ablation_summary["n"].unique()) == {args.expected_ablation_cell_n},
                 f"Ablation cell n should be exactly {args.expected_ablation_cell_n}",
+            )
+
+    budget_detail_path = out_dir / "combined_budget_sweep_detailed.csv"
+    budget_summary_path = out_dir / "combined_budget_sweep_summary.csv"
+    if args.expected_budget_sweep_rows is not None:
+        require(budget_detail_path.exists(), f"Missing budget sweep detail file: {budget_detail_path}")
+        require(budget_summary_path.exists(), f"Missing budget sweep summary file: {budget_summary_path}")
+    if budget_detail_path.exists() and budget_summary_path.exists():
+        budget_detail = pd.read_csv(budget_detail_path)
+        budget_summary = pd.read_csv(budget_summary_path)
+        require(budget_detail.isna().sum().sum() == 0, "Budget sweep contains NaN values")
+        require(budget_summary.isna().sum().sum() == 0, "Budget sweep summary contains NaN values")
+        require(set(budget_detail["method"].unique()) == {"quantum_inspired", "genetic_algorithm", "simulated_annealing"}, "Budget sweep should only contain QI, GA, and SA")
+        require((budget_detail["fitness_evaluations"] == budget_detail["fitness_budget"]).all(), "Budget sweep fitness_evaluations must match fitness_budget")
+        if args.expected_budget_sweep_rows is not None:
+            require(
+                len(budget_detail) == args.expected_budget_sweep_rows,
+                f"Expected {args.expected_budget_sweep_rows} budget sweep rows, got {len(budget_detail)}",
+            )
+        if args.expected_sweep_cell_n is not None:
+            require(
+                set(budget_summary[budget_summary["seed"].astype(str) != "ALL"]["n"].unique()) == {args.expected_sweep_cell_n},
+                f"Budget sweep seed-level n should be exactly {args.expected_sweep_cell_n}",
+            )
+
+    novelty_detail_path = out_dir / "combined_novelty_sweep_detailed.csv"
+    novelty_summary_path = out_dir / "combined_novelty_sweep_summary.csv"
+    if args.expected_novelty_sweep_rows is not None:
+        require(novelty_detail_path.exists(), f"Missing novelty sweep detail file: {novelty_detail_path}")
+        require(novelty_summary_path.exists(), f"Missing novelty sweep summary file: {novelty_summary_path}")
+    if novelty_detail_path.exists() and novelty_summary_path.exists():
+        novelty_detail = pd.read_csv(novelty_detail_path)
+        novelty_summary = pd.read_csv(novelty_summary_path)
+        require(novelty_detail.isna().sum().sum() == 0, "Novelty sweep contains NaN values")
+        require(novelty_summary.isna().sum().sum() == 0, "Novelty sweep summary contains NaN values")
+        require(set(novelty_detail["method"].unique()) == {"quantum_inspired", "genetic_algorithm", "simulated_annealing"}, "Novelty sweep should only contain QI, GA, and SA")
+        require((novelty_detail["fitness_evaluations"] == novelty_detail["fitness_budget"]).all(), "Novelty sweep fitness_evaluations must match fitness_budget")
+        if args.expected_novelty_sweep_rows is not None:
+            require(
+                len(novelty_detail) == args.expected_novelty_sweep_rows,
+                f"Expected {args.expected_novelty_sweep_rows} novelty sweep rows, got {len(novelty_detail)}",
+            )
+        if args.expected_sweep_cell_n is not None:
+            require(
+                set(novelty_summary[novelty_summary["seed"].astype(str) != "ALL"]["n"].unique()) == {args.expected_sweep_cell_n},
+                f"Novelty sweep seed-level n should be exactly {args.expected_sweep_cell_n}",
             )
 
     if args.expect_standard_config:

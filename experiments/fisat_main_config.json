@@ -29,6 +29,22 @@
   "mutation_rate": 0.03,
   "sa_steps": 23,
   "stat_permutations": 999,
+  "run_budget_sweep": true,
+  "run_novelty_sweep": true,
+  "sweep_rooms_per_cell": 200,
+  "budget_sweep_values": [
+    8,
+    16,
+    24,
+    32,
+    64
+  ],
+  "novelty_sweep_weights": [
+    0,
+    25,
+    50,
+    100
+  ],
   "ablation_rooms_per_cell": 200,
   "ablation_k_values": [
     8,

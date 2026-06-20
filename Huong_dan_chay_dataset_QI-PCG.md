@@ -82,6 +82,33 @@ Validate full output:
 python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```
 
+## Optional: fair-budget sweep và novelty-pressure sweep
+
+Phần này dùng khi muốn kiểm tra sâu hơn yêu cầu so sánh công bằng QI/GA/SA theo nhiều ngân sách fitness. Không cần chạy nếu chỉ smoke test dataset.
+
+Chạy riêng sweep, không chạy lại main experiment và ablation:
+
+```powershell
+python experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --seeds 10 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_fisat_main
+```
+
+Kết quả bổ sung:
+
+```text
+combined_budget_sweep_detailed.csv
+combined_budget_sweep_summary.csv
+combined_novelty_sweep_detailed.csv
+combined_novelty_sweep_summary.csv
+```
+
+Budget sweep dùng `8,16,24,32,64` fitness evaluations cho QI/GA/SA. Novelty sweep dùng `novelty_weight = 0,25,50,100` tại 24 evaluations.
+
+Validate full output kèm sweep:
+
+```powershell
+python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 60000 --expected-novelty-sweep-rows 48000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
+```
+
 ## Kết quả cần kiểm tra
 
 Sau full run, các file quan trọng nằm ở:

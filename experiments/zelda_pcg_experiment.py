@@ -578,6 +578,7 @@ GENERATORS: dict[str, Callable[[np.random.Generator, dict, float, dict], np.ndar
     "genetic_algorithm": genetic_algorithm,
     "simulated_annealing": simulated_annealing,
 }
+SEARCH_METHODS = ["quantum_inspired", "genetic_algorithm", "simulated_annealing"]
 METHOD_SEED_OFFSETS = {method: idx * 10007 for idx, method in enumerate(GENERATORS)}
 METHOD_LABELS = {
     "uniform_random": "Uniform\nrandom",
@@ -632,6 +633,54 @@ def method_fitness_evaluations(method: str, params: dict) -> int:
     return 0
 
 
+def parse_int_list(value: str) -> list[int]:
+    return [int(part.strip()) for part in value.split(",") if part.strip()]
+
+
+def parse_float_list(value: str) -> list[float]:
+    return [float(part.strip()) for part in value.split(",") if part.strip()]
+
+
+def base_search_params(args: argparse.Namespace, novelty_weight: float | None = None) -> dict:
+    return {
+        "k": args.k,
+        "ga_population": args.ga_population,
+        "ga_generations": args.ga_generations,
+        "mutation_rate": args.mutation_rate,
+        "sa_steps": args.sa_steps,
+        "quantum_population": args.quantum_population,
+        "quantum_iterations": args.quantum_iterations,
+        "quantum_eta": args.quantum_eta,
+        "quantum_min_prob": args.quantum_min_prob,
+        "quantum_prior_anchor": args.quantum_prior_anchor,
+        "novelty_weight": args.novelty_weight if novelty_weight is None else novelty_weight,
+    }
+
+
+def fair_budget_params(args: argparse.Namespace, method: str, budget: int, novelty_weight: float | None = None) -> dict:
+    if budget < 1:
+        raise ValueError(f"Fitness budget must be positive, got {budget}")
+    params = base_search_params(args, novelty_weight)
+    params["k"] = budget
+    if method == "quantum_inspired":
+        population = min(args.quantum_population, budget)
+        if budget % population != 0:
+            raise ValueError(f"QI budget {budget} must be divisible by population {population}")
+        params["quantum_population"] = population
+        params["quantum_iterations"] = budget // population
+    elif method == "genetic_algorithm":
+        population = min(args.ga_population, budget)
+        if budget % population != 0:
+            raise ValueError(f"GA budget {budget} must be divisible by population {population}")
+        params["ga_population"] = population
+        params["ga_generations"] = budget // population - 1
+    elif method == "simulated_annealing":
+        params["sa_steps"] = budget - 1
+    else:
+        raise ValueError(f"Budget sweep only supports search methods, got {method}")
+    return params
+
+
 def run_reference_rows(test: list[RoomRecord], stats_data: dict, target: float, split_seed: int) -> list[dict]:
     rows = []
     for idx, record in enumerate(test):
@@ -657,19 +706,7 @@ def run_reference_rows(test: list[RoomRecord], stats_data: dict, target: float, 
 
 def run_generation(dataset: str, stats_data: dict, methods: list[str], args: argparse.Namespace) -> list[dict]:
     rows = []
-    params = {
-        "k": args.k,
-        "ga_population": args.ga_population,
-        "ga_generations": args.ga_generations,
-        "mutation_rate": args.mutation_rate,
-        "sa_steps": args.sa_steps,
-        "quantum_population": args.quantum_population,
-        "quantum_iterations": args.quantum_iterations,
-        "quantum_eta": args.quantum_eta,
-        "quantum_min_prob": args.quantum_min_prob,
-        "quantum_prior_anchor": args.quantum_prior_anchor,
-        "novelty_weight": args.novelty_weight,
-    }
+    params = base_search_params(args)
     for seed in range(args.seed_start, args.seed_start + args.seeds):
         for method in methods:
             rng = np.random.default_rng(seed * 1009 + METHOD_SEED_OFFSETS[method])
@@ -705,6 +742,54 @@ def run_generation(dataset: str, stats_data: dict, methods: list[str], args: arg
     return rows
 
 
+def run_search_sweep(
+    dataset: str,
+    stats_data: dict,
+    args: argparse.Namespace,
+    *,
+    sweep_name: str,
+    budgets: list[int],
+    novelty_weights: list[float],
+) -> list[dict]:
+    rows = []
+    for seed in range(args.seed_start, args.seed_start + args.seeds):
+        for method in SEARCH_METHODS:
+            generator = GENERATORS[method]
+            for budget in budgets:
+                for novelty_weight in novelty_weights:
+                    params = fair_budget_params(args, method, budget, novelty_weight)
+                    fitness_evaluations = method_fitness_evaluations(method, params)
+                    rng_seed = seed * 1009 + METHOD_SEED_OFFSETS[method] + stable_offset(dataset, sweep_name, budget, novelty_weight)
+                    rng = np.random.default_rng(rng_seed)
+                    for idx in range(args.sweep_rooms_per_cell):
+                        start = time.perf_counter()
+                        failure = 0
+                        try:
+                            grid = generator(rng, stats_data, args.target_difficulty, params)
+                        except Exception:
+                            failure = 1
+                            h, w, _ = stats_data["positional_prior"].shape
+                            grid = np.full((h, w), CAT_TO_ID["wall"], dtype=np.int16)
+                        elapsed = time.perf_counter() - start
+                        rows.append(
+                            {
+                                "dataset": dataset,
+                                "sweep": sweep_name,
+                                "method": method,
+                                "seed": seed,
+                                "room_index": idx,
+                                "fitness_budget": budget,
+                                "novelty_weight": novelty_weight,
+                                "target_difficulty": args.target_difficulty,
+                                "generation_time": elapsed,
+                                "fitness_evaluations": fitness_evaluations,
+                                "failure_flag": failure,
+                                **evaluate_grid(grid, stats_data, args.target_difficulty),
+                            }
+                        )
+    return rows
+
+
 def summarize(rows: list[dict]) -> list[dict]:
     grouped: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     for row in rows:
@@ -713,6 +798,39 @@ def summarize(rows: list[dict]) -> list[dict]:
     out = []
     for (dataset, method, seed), group in sorted(grouped.items()):
         item = {"dataset": dataset, "method": method, "seed": seed, "n": len(group)}
+        for metric in METRICS:
+            vals = [float(row[metric]) for row in group]
+            item[f"{metric}_mean"] = statistics.fmean(vals)
+            item[f"{metric}_std"] = statistics.pstdev(vals) if len(vals) > 1 else 0.0
+        out.append(item)
+    return out
+
+
+def summarize_search_sweep(rows: list[dict]) -> list[dict]:
+    grouped: dict[tuple[str, str, str, str, int, float], list[dict]] = defaultdict(list)
+    for row in rows:
+        key = (
+            row["dataset"],
+            row["sweep"],
+            row["method"],
+            str(row["seed"]),
+            int(row["fitness_budget"]),
+            float(row["novelty_weight"]),
+        )
+        all_key = (row["dataset"], row["sweep"], row["method"], "ALL", int(row["fitness_budget"]), float(row["novelty_weight"]))
+        grouped[key].append(row)
+        grouped[all_key].append(row)
+    out = []
+    for (dataset, sweep, method, seed, budget, novelty_weight), group in sorted(grouped.items()):
+        item = {
+            "dataset": dataset,
+            "sweep": sweep,
+            "method": method,
+            "seed": seed,
+            "fitness_budget": budget,
+            "novelty_weight": novelty_weight,
+            "n": len(group),
+        }
         for metric in METRICS:
             vals = [float(row[metric]) for row in group]
             item[f"{metric}_mean"] = statistics.fmean(vals)
@@ -1178,7 +1296,12 @@ def summarize_ablation(rows: list[dict]) -> list[dict]:
     return out
 
 
-def process_dataset(spec: DatasetSpec, args: argparse.Namespace, root_out: Path, methods: list[str]) -> tuple[list[dict], list[dict], list[dict], list[dict], list[dict]]:
+def process_dataset(
+    spec: DatasetSpec,
+    args: argparse.Namespace,
+    root_out: Path,
+    methods: list[str],
+) -> tuple[list[dict], list[dict], list[dict], list[dict], list[dict], list[dict], list[dict], list[dict], list[dict]]:
     records, meta = load_dataset(spec)
     train, test = split_records(records, args.train_ratio, args.split_seed)
     stats_data = build_stats(train, test, spec)
@@ -1212,7 +1335,35 @@ def process_dataset(spec: DatasetSpec, args: argparse.Namespace, root_out: Path,
         ablation_summary = summarize_ablation(ablation_detail)
         write_csv(out_dir / "ablation_detailed.csv", ablation_detail, include_ascii=False)
         write_csv(out_dir / "ablation_summary.csv", ablation_summary, include_ascii=False)
-    return detail, summary, tests, ablation_summary, ablation_detail
+    budget_detail: list[dict] = []
+    budget_summary: list[dict] = []
+    novelty_detail: list[dict] = []
+    novelty_summary: list[dict] = []
+    if args.run_budget_sweep:
+        budget_detail = run_search_sweep(
+            spec.name,
+            stats_data,
+            args,
+            sweep_name="budget",
+            budgets=parse_int_list(args.budget_sweep_values),
+            novelty_weights=[args.novelty_weight],
+        )
+        budget_summary = summarize_search_sweep(budget_detail)
+        write_csv(out_dir / "budget_sweep_detailed.csv", budget_detail, include_ascii=False)
+        write_csv(out_dir / "budget_sweep_summary.csv", budget_summary, include_ascii=False)
+    if args.run_novelty_sweep:
+        novelty_detail = run_search_sweep(
+            spec.name,
+            stats_data,
+            args,
+            sweep_name="novelty_weight",
+            budgets=[args.k],
+            novelty_weights=parse_float_list(args.novelty_sweep_weights),
+        )
+        novelty_summary = summarize_search_sweep(novelty_detail)
+        write_csv(out_dir / "novelty_sweep_detailed.csv", novelty_detail, include_ascii=False)
+        write_csv(out_dir / "novelty_sweep_summary.csv", novelty_summary, include_ascii=False)
+    return detail, summary, tests, ablation_summary, ablation_detail, budget_summary, budget_detail, novelty_summary, novelty_detail
 
 
 def combine_outputs(
@@ -1222,6 +1373,10 @@ def combine_outputs(
     all_tests: list[dict],
     all_ablation_summary: list[dict],
     all_ablation_detail: list[dict],
+    all_budget_summary: list[dict],
+    all_budget_detail: list[dict],
+    all_novelty_summary: list[dict],
+    all_novelty_detail: list[dict],
 ) -> None:
     write_csv(root_out / "combined_results_detailed.csv", all_detail)
     write_csv(root_out / "combined_results_summary.csv", all_summary, include_ascii=False)
@@ -1232,6 +1387,14 @@ def combine_outputs(
         write_ablation_figures(root_out, all_ablation_summary)
     if all_ablation_detail:
         write_csv(root_out / "combined_ablation_detailed.csv", all_ablation_detail, include_ascii=False)
+    if all_budget_summary:
+        write_csv(root_out / "combined_budget_sweep_summary.csv", all_budget_summary, include_ascii=False)
+    if all_budget_detail:
+        write_csv(root_out / "combined_budget_sweep_detailed.csv", all_budget_detail, include_ascii=False)
+    if all_novelty_summary:
+        write_csv(root_out / "combined_novelty_sweep_summary.csv", all_novelty_summary, include_ascii=False)
+    if all_novelty_detail:
+        write_csv(root_out / "combined_novelty_sweep_detailed.csv", all_novelty_detail, include_ascii=False)
 
 
 def parse_args() -> argparse.Namespace:
@@ -1261,6 +1424,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stat-permutations", type=int, default=999)
     parser.add_argument("--skip-ablation", action="store_true")
     parser.add_argument("--ablation-only", action="store_true", help="Run only ablation outputs for the selected datasets.")
+    parser.add_argument("--run-budget-sweep", action="store_true", help="Run QI/GA/SA quality curves over multiple fitness budgets.")
+    parser.add_argument("--run-novelty-sweep", action="store_true", help="Run QI/GA/SA trade-off curves over novelty fitness weights.")
+    parser.add_argument("--sweep-only", action="store_true", help="Run only the enabled sweep outputs without regenerating main or ablation outputs.")
+    parser.add_argument("--sweep-rooms-per-cell", type=int, default=200)
+    parser.add_argument("--budget-sweep-values", default="8,16,24,32,64")
+    parser.add_argument("--novelty-sweep-weights", default="0,25,50,100")
     return parser.parse_args()
 
 
@@ -1276,33 +1445,117 @@ def main() -> None:
         raise SystemExit(f"Unknown datasets: {unknown_datasets}")
     if unknown_methods:
         raise SystemExit(f"Unknown methods: {unknown_methods}")
-    write_json(
-        args.out_dir / "run_config_main.json",
-        {
-            "datasets": datasets,
-            "rooms_per_method": args.rooms_per_method,
-            "seeds": args.seeds,
-            "seed_start": args.seed_start,
-            "split_seed": args.split_seed,
-            "train_ratio": args.train_ratio,
-            "target_difficulty": args.target_difficulty,
-            "methods": methods,
-            "k": args.k,
-            "quantum_population": args.quantum_population,
-            "quantum_iterations": args.quantum_iterations,
-            "quantum_eta": args.quantum_eta,
-            "quantum_min_prob": args.quantum_min_prob,
-            "quantum_prior_anchor": args.quantum_prior_anchor,
-            "novelty_weight": args.novelty_weight,
-            "ga_population": args.ga_population,
-            "ga_generations": args.ga_generations,
-            "mutation_rate": args.mutation_rate,
-            "sa_steps": args.sa_steps,
-            "stat_permutations": args.stat_permutations,
-        },
-    )
-    if not args.skip_ablation:
+    if not args.sweep_only:
+        write_json(
+            args.out_dir / "run_config_main.json",
+            {
+                "datasets": datasets,
+                "rooms_per_method": args.rooms_per_method,
+                "seeds": args.seeds,
+                "seed_start": args.seed_start,
+                "split_seed": args.split_seed,
+                "train_ratio": args.train_ratio,
+                "target_difficulty": args.target_difficulty,
+                "methods": methods,
+                "k": args.k,
+                "quantum_population": args.quantum_population,
+                "quantum_iterations": args.quantum_iterations,
+                "quantum_eta": args.quantum_eta,
+                "quantum_min_prob": args.quantum_min_prob,
+                "quantum_prior_anchor": args.quantum_prior_anchor,
+                "novelty_weight": args.novelty_weight,
+                "ga_population": args.ga_population,
+                "ga_generations": args.ga_generations,
+                "mutation_rate": args.mutation_rate,
+                "sa_steps": args.sa_steps,
+                "stat_permutations": args.stat_permutations,
+                "run_budget_sweep": args.run_budget_sweep,
+                "run_novelty_sweep": args.run_novelty_sweep,
+                "sweep_rooms_per_cell": args.sweep_rooms_per_cell,
+                "budget_sweep_values": parse_int_list(args.budget_sweep_values),
+                "novelty_sweep_weights": parse_float_list(args.novelty_sweep_weights),
+            },
+        )
+    if not args.skip_ablation and not args.sweep_only:
         write_json(args.out_dir / "run_config_ablation.json", {"ablation_rooms_per_cell": args.ablation_rooms_per_cell, "k_values": [8, 16, 24, 32, 64]})
+    if args.run_budget_sweep:
+        write_json(
+            args.out_dir / "run_config_budget_sweep.json",
+            {
+                "sweep_rooms_per_cell": args.sweep_rooms_per_cell,
+                "methods": SEARCH_METHODS,
+                "fitness_budgets": parse_int_list(args.budget_sweep_values),
+                "novelty_weight": args.novelty_weight,
+                "seeds": args.seeds,
+                "seed_start": args.seed_start,
+            },
+        )
+    if args.run_novelty_sweep:
+        write_json(
+            args.out_dir / "run_config_novelty_sweep.json",
+            {
+                "sweep_rooms_per_cell": args.sweep_rooms_per_cell,
+                "methods": SEARCH_METHODS,
+                "fitness_budget": args.k,
+                "novelty_weights": parse_float_list(args.novelty_sweep_weights),
+                "seeds": args.seeds,
+                "seed_start": args.seed_start,
+            },
+        )
+    if args.sweep_only:
+        if not args.run_budget_sweep and not args.run_novelty_sweep:
+            raise SystemExit("--sweep-only requires --run-budget-sweep and/or --run-novelty-sweep")
+        all_budget_detail: list[dict] = []
+        all_budget_summary: list[dict] = []
+        all_novelty_detail: list[dict] = []
+        all_novelty_summary: list[dict] = []
+        for dataset in datasets:
+            print(f"running sweeps dataset={dataset}", flush=True)
+            records, _ = load_dataset(specs[dataset])
+            train, test = split_records(records, args.train_ratio, args.split_seed)
+            stats_data = build_stats(train, test, specs[dataset])
+            out_dir = args.out_dir / dataset
+            out_dir.mkdir(parents=True, exist_ok=True)
+            if args.run_budget_sweep:
+                budget_detail = run_search_sweep(
+                    dataset,
+                    stats_data,
+                    args,
+                    sweep_name="budget",
+                    budgets=parse_int_list(args.budget_sweep_values),
+                    novelty_weights=[args.novelty_weight],
+                )
+                budget_summary = summarize_search_sweep(budget_detail)
+                write_csv(out_dir / "budget_sweep_detailed.csv", budget_detail, include_ascii=False)
+                write_csv(out_dir / "budget_sweep_summary.csv", budget_summary, include_ascii=False)
+                all_budget_detail.extend(budget_detail)
+                all_budget_summary.extend(budget_summary)
+                print(f"dataset={dataset} budget_sweep_rows={len(budget_detail)}", flush=True)
+            if args.run_novelty_sweep:
+                novelty_detail = run_search_sweep(
+                    dataset,
+                    stats_data,
+                    args,
+                    sweep_name="novelty_weight",
+                    budgets=[args.k],
+                    novelty_weights=parse_float_list(args.novelty_sweep_weights),
+                )
+                novelty_summary = summarize_search_sweep(novelty_detail)
+                write_csv(out_dir / "novelty_sweep_detailed.csv", novelty_detail, include_ascii=False)
+                write_csv(out_dir / "novelty_sweep_summary.csv", novelty_summary, include_ascii=False)
+                all_novelty_detail.extend(novelty_detail)
+                all_novelty_summary.extend(novelty_summary)
+                print(f"dataset={dataset} novelty_sweep_rows={len(novelty_detail)}", flush=True)
+        if all_budget_summary:
+            write_csv(args.out_dir / "combined_budget_sweep_summary.csv", all_budget_summary, include_ascii=False)
+        if all_budget_detail:
+            write_csv(args.out_dir / "combined_budget_sweep_detailed.csv", all_budget_detail, include_ascii=False)
+        if all_novelty_summary:
+            write_csv(args.out_dir / "combined_novelty_sweep_summary.csv", all_novelty_summary, include_ascii=False)
+        if all_novelty_detail:
+            write_csv(args.out_dir / "combined_novelty_sweep_detailed.csv", all_novelty_detail, include_ascii=False)
+        print(f"output_dir={args.out_dir.resolve()}", flush=True)
+        return
     if args.ablation_only:
         all_ablation_detail: list[dict] = []
         all_ablation_summary: list[dict] = []
@@ -1330,17 +1583,46 @@ def main() -> None:
     all_tests: list[dict] = []
     all_ablation_summary: list[dict] = []
     all_ablation_detail: list[dict] = []
+    all_budget_summary: list[dict] = []
+    all_budget_detail: list[dict] = []
+    all_novelty_summary: list[dict] = []
+    all_novelty_detail: list[dict] = []
     for dataset in datasets:
         print(f"running dataset={dataset}", flush=True)
-        detail, summary, tests, ablation_summary, ablation_detail = process_dataset(specs[dataset], args, args.out_dir, methods)
+        (
+            detail,
+            summary,
+            tests,
+            ablation_summary,
+            ablation_detail,
+            budget_summary,
+            budget_detail,
+            novelty_summary,
+            novelty_detail,
+        ) = process_dataset(specs[dataset], args, args.out_dir, methods)
         all_detail.extend(detail)
         all_summary.extend(summary)
         all_tests.extend(tests)
         all_ablation_summary.extend(ablation_summary)
         all_ablation_detail.extend(ablation_detail)
+        all_budget_summary.extend(budget_summary)
+        all_budget_detail.extend(budget_detail)
+        all_novelty_summary.extend(novelty_summary)
+        all_novelty_detail.extend(novelty_detail)
         generated_rows = sum(1 for row in detail if int(row["is_reference"]) == 0)
         print(f"dataset={dataset} generated_rows={generated_rows} total_rows={len(detail)}", flush=True)
-    combine_outputs(args.out_dir, all_detail, all_summary, all_tests, all_ablation_summary, all_ablation_detail)
+    combine_outputs(
+        args.out_dir,
+        all_detail,
+        all_summary,
+        all_tests,
+        all_ablation_summary,
+        all_ablation_detail,
+        all_budget_summary,
+        all_budget_detail,
+        all_novelty_summary,
+        all_novelty_detail,
+    )
     print(f"output_dir={args.out_dir.resolve()}", flush=True)
 
 

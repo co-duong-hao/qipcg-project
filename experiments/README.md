@@ -39,6 +39,8 @@ The fair-budget main configuration uses:
 - GA population 8, generations 2, total 24 fitness evaluations
 - SA steps 23, total 24 fitness evaluations
 - ablation: 6 variants x 5 K values x 200 samples per cell x 2 datasets
+- optional budget sweep: QI/GA/SA at 8, 16, 24, 32, and 64 fitness evaluations
+- optional novelty sweep: QI/GA/SA at novelty weights 0, 25, 50, and 100
 - reference configuration: `experiments/fisat_main_config.json`
 
 Content metrics are seeded and should be reproducible with the same dataset and
@@ -56,6 +58,25 @@ Full final run command:
 
 ```powershell
 & 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 10 --ablation-rooms-per-cell 200 --stat-permutations 999 --out-dir experiments\output_fisat_main
+```
+
+Optional fair-budget and novelty-pressure sweeps:
+
+```powershell
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --seeds 10 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_fisat_main
+```
+
+This writes:
+
+- `output_fisat_main/combined_budget_sweep_detailed.csv`
+- `output_fisat_main/combined_budget_sweep_summary.csv`
+- `output_fisat_main/combined_novelty_sweep_detailed.csv`
+- `output_fisat_main/combined_novelty_sweep_summary.csv`
+
+Validate full output plus optional sweeps:
+
+```powershell
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 60000 --expected-novelty-sweep-rows 48000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 Regenerate vector paper figures after a full run:

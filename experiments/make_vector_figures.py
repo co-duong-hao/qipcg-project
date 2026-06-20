@@ -21,6 +21,7 @@ METHOD_ORDER = [
     "genetic_algorithm",
     "simulated_annealing",
 ]
+SEARCH_METHOD_ORDER = ["quantum_inspired", "genetic_algorithm", "simulated_annealing"]
 METHOD_LABELS = {
     "uniform_random": "Uniform",
     "dataset_prior_random": "Dataset prior",
@@ -339,6 +340,99 @@ def ablation_curve(path: Path, rows: pd.DataFrame, dataset: str, metric: str, *,
     c.save()
 
 
+def budget_curve(path: Path, rows: pd.DataFrame, dataset: str, metric: str) -> None:
+    title = f"{DATASET_LABELS[dataset]}: {METRIC_LABELS[metric]} by evaluation budget"
+    c, plot = make_canvas(path, title, METRIC_LABELS[metric], "Fitness evaluations")
+    plot = apply_right_legend_layout(c, "Fitness evaluations", legend_width=122)
+    left, bottom, right, top = plot
+    rows = rows[(rows["dataset"] == dataset) & (rows["seed"].astype(str) == "ALL")]
+    rows = rows[rows["method"].isin(SEARCH_METHOD_ORDER)]
+    values = rows[f"{metric}_mean"].astype(float).tolist()
+    y_min, y_max = min(values), max(values)
+    pad = max(0.01, (y_max - y_min) * 0.12)
+    y_min, y_max = max(0.0, y_min - pad), min(1.0, y_max + pad)
+    ticks = [y_min + i * (y_max - y_min) / 4 for i in range(5)]
+    draw_y_ticks(c, plot, ticks, y_min, y_max, lambda value: f"{value:.3f}" if y_max - y_min < 0.2 else f"{value:.2f}")
+    budgets = sorted(rows["fitness_budget"].astype(int).unique())
+    x_min, x_max = min(budgets), max(budgets)
+    c.setFont("Helvetica", 8)
+    for budget in budgets:
+        x = left + (budget - x_min) / (x_max - x_min) * (right - left)
+        c.drawCentredString(x, bottom - 15, str(budget))
+    span = max(1e-12, y_max - y_min)
+    for method in SEARCH_METHOD_ORDER:
+        vr = rows[rows["method"] == method].sort_values("fitness_budget")
+        points: list[tuple[float, float]] = []
+        for _, row in vr.iterrows():
+            x = left + (int(row["fitness_budget"]) - x_min) / (x_max - x_min) * (right - left)
+            y = bottom + (float(row[f"{metric}_mean"]) - y_min) / span * (top - bottom)
+            points.append((x, y))
+        c.setStrokeColor(COLORS[method])
+        c.setLineWidth(2.0 if method == "quantum_inspired" else 1.4)
+        for p1, p2 in zip(points, points[1:]):
+            c.line(p1[0], p1[1], p2[0], p2[1])
+        c.setFillColor(COLORS[method])
+        for x, y in points:
+            c.circle(x, y, 3.0, fill=1, stroke=0)
+    draw_legend(c, right + 28, PAGE_H - 98, SEARCH_METHOD_ORDER, METHOD_LABELS, font_size=8.5, row_gap=16)
+    c.save()
+
+
+def novelty_tradeoff_chart(path: Path, rows: pd.DataFrame, dataset: str) -> None:
+    title = f"{DATASET_LABELS[dataset]}: novelty-weight trade-off"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    c = canvas.Canvas(str(path), pagesize=(PAGE_W, PAGE_H))
+    c.setTitle(title)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawCentredString(PAGE_W / 2, PAGE_H - 24, title)
+    rows = rows[(rows["dataset"] == dataset) & (rows["seed"].astype(str) == "ALL")]
+    rows = rows[rows["method"].isin(SEARCH_METHOD_ORDER)]
+    metrics = ["playability", "style_similarity", "novelty"]
+    panel_w = 118
+    gap = 18
+    bottom, top = 78, PAGE_H - 58
+    left0 = 54
+    weights = sorted(rows["novelty_weight"].astype(float).unique())
+    x_min, x_max = min(weights), max(weights)
+    for panel_idx, metric in enumerate(metrics):
+        left = left0 + panel_idx * (panel_w + gap)
+        right = left + panel_w
+        plot = (left, bottom, right, top)
+        draw_axes(c, plot)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.drawCentredString((left + right) / 2, top + 10, METRIC_LABELS[metric])
+        vals = rows[f"{metric}_mean"].astype(float).tolist()
+        y_min, y_max = min(vals), max(vals)
+        pad = max(0.01, (y_max - y_min) * 0.16)
+        y_min, y_max = max(0.0, y_min - pad), min(1.0, y_max + pad)
+        ticks = [y_min + i * (y_max - y_min) / 3 for i in range(4)]
+        draw_y_ticks(c, plot, ticks, y_min, y_max, lambda value: f"{value:.2f}")
+        c.setFont("Helvetica", 7)
+        for weight in weights:
+            x = left + (weight - x_min) / max(1e-12, x_max - x_min) * (right - left)
+            c.drawCentredString(x, bottom - 14, fmt_value(weight))
+        span = max(1e-12, y_max - y_min)
+        for method in SEARCH_METHOD_ORDER:
+            vr = rows[rows["method"] == method].sort_values("novelty_weight")
+            points: list[tuple[float, float]] = []
+            for _, row in vr.iterrows():
+                x = left + (float(row["novelty_weight"]) - x_min) / max(1e-12, x_max - x_min) * (right - left)
+                y = bottom + (float(row[f"{metric}_mean"]) - y_min) / span * (top - bottom)
+                points.append((x, y))
+            c.setStrokeColor(COLORS[method])
+            c.setLineWidth(2.0 if method == "quantum_inspired" else 1.3)
+            for p1, p2 in zip(points, points[1:]):
+                c.line(p1[0], p1[1], p2[0], p2[1])
+            c.setFillColor(COLORS[method])
+            for x, y in points:
+                c.circle(x, y, 2.6, fill=1, stroke=0)
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(PAGE_W / 2, 22, "Novelty weight in fitness")
+    draw_legend(c, PAGE_W - 96, PAGE_H - 92, SEARCH_METHOD_ORDER, METHOD_LABELS, font_size=8, row_gap=15)
+    c.save()
+
+
 def draw_legend(
     c: canvas.Canvas,
     x: float,
@@ -363,7 +457,12 @@ def main() -> int:
     out_dir = args.out_dir if args.out_dir.is_absolute() else ROOT / args.out_dir
     paper_figures = args.paper_figures if args.paper_figures.is_absolute() else ROOT / args.paper_figures
     summary = pd.read_csv(out_dir / "combined_results_summary.csv")
-    ablation = pd.read_csv(out_dir / "combined_ablation_summary.csv")
+    ablation_path = out_dir / "combined_ablation_summary.csv"
+    budget_path = out_dir / "combined_budget_sweep_summary.csv"
+    novelty_path = out_dir / "combined_novelty_sweep_summary.csv"
+    ablation = pd.read_csv(ablation_path) if ablation_path.exists() else pd.DataFrame()
+    budget = pd.read_csv(budget_path) if budget_path.exists() else pd.DataFrame()
+    novelty = pd.read_csv(novelty_path) if novelty_path.exists() else pd.DataFrame()
     figure_dir = out_dir / "figures"
     figure_dir.mkdir(parents=True, exist_ok=True)
     paper_figures.mkdir(parents=True, exist_ok=True)
@@ -394,10 +493,24 @@ def main() -> int:
                 show_error_bars=False,
             )
             scatter_chart(target / f"{dataset}_novelty_style.pdf", summary, dataset)
-            ablation_curve(target / f"{dataset}_ablation_novelty.pdf", ablation, dataset, "novelty")
-            ablation_curve(target / f"{dataset}_ablation_pattern.pdf", ablation, dataset, "pattern_similarity_2x2")
-            ablation_curve(target / f"{dataset}_ablation_time.pdf", ablation, dataset, "generation_time", log=True)
-    print(f"wrote_vector_figures={len(targets) * 14}")
+            if not ablation.empty:
+                ablation_curve(target / f"{dataset}_ablation_novelty.pdf", ablation, dataset, "novelty")
+                ablation_curve(target / f"{dataset}_ablation_pattern.pdf", ablation, dataset, "pattern_similarity_2x2")
+                ablation_curve(target / f"{dataset}_ablation_time.pdf", ablation, dataset, "generation_time", log=True)
+            if not budget.empty:
+                budget_curve(target / f"{dataset}_budget_playability.pdf", budget, dataset, "playability")
+                budget_curve(target / f"{dataset}_budget_novelty.pdf", budget, dataset, "novelty")
+                budget_curve(target / f"{dataset}_budget_style.pdf", budget, dataset, "style_similarity")
+            if not novelty.empty:
+                novelty_tradeoff_chart(target / f"{dataset}_novelty_weight_tradeoff.pdf", novelty, dataset)
+    per_dataset = 4
+    if not ablation.empty:
+        per_dataset += 3
+    if not budget.empty:
+        per_dataset += 3
+    if not novelty.empty:
+        per_dataset += 1
+    print(f"wrote_vector_figures={len(targets) * 2 * per_dataset}")
     print(f"paper_figures={paper_figures}")
     return 0
 
