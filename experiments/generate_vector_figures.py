@@ -10,8 +10,8 @@ from reportlab.pdfgen import canvas
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = ROOT / "experiments" / "output_fisat_main"
-DEFAULT_PAPER_FIGS = ROOT / "paper" / "q2_figures"
+DEFAULT_OUT = ROOT / "experiments" / "output_reproduction_main"
+DEFAULT_PAPER_FIGS = ROOT / "paper" / "figures"
 
 METHOD_ORDER = [
     "uniform_random",
@@ -71,7 +71,7 @@ BOTTOM = 78
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create vector PDF paper figures from FISAT experiment CSV outputs.")
+    parser = argparse.ArgumentParser(description="Create vector PDF paper figures from experiment CSV outputs.")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--paper-figures", type=Path, default=DEFAULT_PAPER_FIGS)
     return parser.parse_args()

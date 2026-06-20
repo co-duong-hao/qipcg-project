@@ -1,4 +1,4 @@
-# qipcg-project
+# Quantum-Inspired PCG Experiment Pipeline
 
 This repository contains the reproducible experiment pipeline for running and
 validating the QI-PCG dataset experiments. It is meant for team members to clone,
@@ -36,13 +36,13 @@ Run this first to confirm that Python, dependencies, and local dataset paths are
 working:
 
 ```powershell
-python experiments\zelda_pcg_experiment.py --out-dir experiments\output_fisat_fair_smoke --rooms-per-method 2 --seeds 1 --ablation-rooms-per-cell 1 --stat-permutations 19
+python experiments\run_experiments.py --out-dir experiments\output_reproduction_smoke --rooms-per-method 2 --seeds 1 --ablation-rooms-per-cell 1 --stat-permutations 19
 ```
 
 Validate the smoke output:
 
 ```powershell
-python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fair_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1 --skip-paper
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_smoke --expected-generated 24 --expected-reference 111 --expected-ablation-rows 60 --expected-ablation-cell-n 1 --skip-paper
 ```
 
 ## Full Experiment
@@ -50,17 +50,17 @@ python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_fai
 Only run the full experiment after the smoke test passes. This can take a long
 time.
 
-The paper configuration is recorded in `experiments/fisat_main_config.json`.
+The paper configuration is recorded in `experiments/reproduction_config.json`.
 Use the command below unchanged when trying to reproduce the paper tables.
 
 ```powershell
-python experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 10 --ablation-rooms-per-cell 200 --stat-permutations 999 --out-dir experiments\output_fisat_main
+python experiments\run_experiments.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 10 --ablation-rooms-per-cell 200 --stat-permutations 999 --out-dir experiments\output_reproduction_main
 ```
 
 Validate the full output:
 
 ```powershell
-python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 ## Optional Fair-Budget Sweeps
@@ -70,7 +70,7 @@ and SA. To reproduce the optional budget/novelty trade-off analysis without
 rerunning the main experiment, run sweeps only:
 
 ```powershell
-python experiments\zelda_pcg_experiment.py --datasets zelda,loderunner --seeds 10 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_fisat_main
+python experiments\run_experiments.py --datasets zelda,loderunner --seeds 10 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_reproduction_main
 ```
 
 This adds:
@@ -85,11 +85,11 @@ combined_novelty_sweep_summary.csv
 Budget sweep uses `8,16,24,32,64` fitness evaluations for QI/GA/SA. Novelty
 sweep uses novelty weights `0,25,50,100` at 24 evaluations.
 
-After running the optional sweeps on top of `output_fisat_main`, validate them
+After running the optional sweeps on top of `output_reproduction_main`, validate them
 with:
 
 ```powershell
-python experiments\validate_q2_outputs.py --out-dir experiments\output_fisat_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 60000 --expected-novelty-sweep-rows 48000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 60000 --expected-novelty-sweep-rows 48000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 Most content metrics should be reproducible with the same dataset, code commit,
@@ -106,7 +106,7 @@ easier to blur and harder to read.
 After a full run, generate vector figures locally with:
 
 ```powershell
-python experiments\make_vector_figures.py --out-dir experiments\output_fisat_main --paper-figures paper\q2_figures
+python experiments\generate_vector_figures.py --out-dir experiments\output_reproduction_main --paper-figures paper\figures
 ```
 
 If you only need to check the dataset pipeline, you do not need to generate
@@ -117,7 +117,7 @@ figures.
 Generated outputs are local-only and ignored by Git. After a full run, check:
 
 ```text
-experiments/output_fisat_main/
+experiments/output_reproduction_main/
   combined_results_detailed.csv
   combined_results_summary.csv
   combined_statistical_tests.csv
@@ -138,10 +138,10 @@ You are helping with the qipcg-project repository. This repo is only for running
 - TheVGLC/Lode Runner/Processed/
 
 Primary scripts:
-- experiments/zelda_pcg_experiment.py: runs the experiment pipeline
-- experiments/validate_q2_outputs.py: validates generated outputs
-- experiments/make_vector_figures.py: regenerates vector PDF figures from output CSVs
-- experiments/fisat_main_config.json: records the paper reproduction configuration
+- experiments/run_experiments.py: runs the experiment pipeline
+- experiments/validate_outputs.py: validates generated outputs
+- experiments/generate_vector_figures.py: regenerates vector PDF figures from output CSVs
+- experiments/reproduction_config.json: records the paper reproduction configuration
 
 Default workflow:
 1. Install dependencies from requirements.txt.
@@ -150,7 +150,7 @@ Default workflow:
 4. Only run full experiment if smoke passes.
 5. Validate full outputs with --expect-standard-config when reproducing paper numbers.
 6. Run optional sweeps with --run-budget-sweep --run-novelty-sweep --sweep-only only when checking fair-budget and novelty-pressure analysis.
-7. If figures are needed for paper/report, generate vector PDF figures with experiments/make_vector_figures.py. Do not use PNG raster figures for final paper/report.
+7. If figures are needed for paper/report, generate vector PDF figures with experiments/generate_vector_figures.py. Do not use PNG raster figures for final paper/report.
 8. Do not commit outputs, dataset, paper, or internal review notes.
 
 Timing columns are machine-dependent; do not expect generation_time values to match exactly across computers.
@@ -161,6 +161,6 @@ When making changes, keep main runnable by smoke test and update README/guide if
 ## Team Rules
 
 - Keep `main` runnable by smoke test.
-- Update this README or `Huong_dan_chay_dataset_QI-PCG.md` if commands change.
+- Update this README or `REPRODUCIBILITY_GUIDE.md` if commands change.
 - Do not commit dataset, output folders, paper files, or internal notes.
 - Commit small, focused changes and include the command used to test them.

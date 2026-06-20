@@ -1401,7 +1401,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Multi-dataset quantum-inspired PCG experiment runner.")
     parser.add_argument("--vglc-root", type=Path, default=Path("TheVGLC"))
     parser.add_argument("--datasets", default="zelda,loderunner")
-    parser.add_argument("--out-dir", type=Path, default=Path("experiments") / "output_fisat")
+    parser.add_argument("--out-dir", type=Path, default=Path("experiments") / "output_reproduction")
     parser.add_argument("--rooms-per-method", type=int, default=500)
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--seed-start", type=int, default=42)

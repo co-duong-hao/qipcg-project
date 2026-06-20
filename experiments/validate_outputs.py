@@ -10,9 +10,9 @@ import pandas as pd
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = ROOT / "experiments" / "output_fisat_main"
-PAPER = ROOT / "paper" / "q2_next.tex"
-FIGURES = ROOT / "paper" / "q2_figures"
+DEFAULT_OUT = ROOT / "experiments" / "output_reproduction_main"
+PAPER = ROOT / "paper" / "main.tex"
+FIGURES = ROOT / "paper" / "figures"
 
 STANDARD_MAIN_CONFIG = {
     "datasets": ["zelda", "loderunner"],
@@ -68,7 +68,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--expect-standard-config",
         action="store_true",
-        help="Check run_config_main.json and run_config_ablation.json against the FISAT paper configuration.",
+        help="Check run_config_main.json and run_config_ablation.json against the standard reproduction configuration.",
     )
     parser.add_argument("--skip-paper", action="store_true")
     return parser.parse_args()
@@ -191,7 +191,7 @@ def main() -> int:
         require(PAPER.exists(), f"Missing paper: {PAPER}")
         tex = PAPER.read_text(encoding="utf-8")
         figure_names = re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", tex)
-        require(figure_names, "No figures found in q2_next.tex")
+        require(figure_names, "No figures found in paper/main.tex")
         require(all(name.lower().endswith(".pdf") for name in figure_names), "Paper figures should use vector PDF files")
         missing = [name for name in figure_names if not (FIGURES / name).exists()]
         require(not missing, f"Missing paper figures: {missing}")
