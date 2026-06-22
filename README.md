@@ -72,6 +72,13 @@ the VGLC paper:
 Also cite this repository when reporting results reproduced from this code. A
 `CITATION.cff` file is included so GitHub can generate a citation entry.
 
+## License
+
+The code and documentation in this repository are released under the MIT
+License. The VGLC dataset, generated outputs, paper files, paper/report figures,
+and internal review notes are not included in this repository and are governed
+by their own sources, owners, or project policies.
+
 ## Install Dependencies
 
 ```powershell
