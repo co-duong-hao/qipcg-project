@@ -1,8 +1,17 @@
 # Quantum-Inspired PCG Experiment Pipeline
 
-This repository contains the reproducible experiment pipeline for running and
-validating the QI-PCG dataset experiments. It is meant for team members to clone,
-install dependencies, place the dataset locally, and run smoke/full experiments.
+This repository is the public reproducibility package for the QI-PCG experiment
+pipeline. It contains the code and documentation needed to run the dataset
+experiments, validate outputs, and regenerate vector figures from local output
+files.
+
+Repository scope:
+
+- reproduce the current 30-seed experiment configuration;
+- validate generated CSV outputs and statistical-test files;
+- regenerate vector PDF figures locally when needed;
+- support team members and reviewers who want to inspect the experiment
+  pipeline.
 
 The repository intentionally does **not** include:
 
@@ -11,6 +20,28 @@ The repository intentionally does **not** include:
 - paper files,
 - internal review notes,
 - paper/report figures.
+
+For details, see `DATA_AVAILABILITY.md`.
+
+## Current Paper Configuration
+
+The current paper uses the 30-seed configuration:
+
+```text
+datasets: Zelda, Lode Runner
+methods: 6 generators
+seeds: 30, seed range 42--71
+main generated rows: 180,000
+held-out reference rows: 111
+ablation rows: 12,000
+budget sweep rows: 180,000
+novelty-pressure sweep rows: 144,000
+statistical permutations: 9,999
+```
+
+The implementation includes optimized sampling and metric code required for the
+30-seed Lode Runner run. Do not revert these optimizations unless replacing them
+with an equivalent validated implementation.
 
 ## Dataset Setup
 
@@ -23,6 +54,23 @@ TheVGLC/
 ```
 
 Do not commit `TheVGLC/`; it is ignored by Git.
+
+## Dataset Citation
+
+The dataset itself is not part of this repository. When using VGLC data, cite
+the VGLC paper:
+
+```bibtex
+@inproceedings{summerville2016vglc,
+  title={The VGLC: The Video Game Level Corpus},
+  author={Summerville, Adam James and Snodgrass, Sam and Mateas, Michael and Onta{\~n}{\'o}n, Santiago},
+  booktitle={Proceedings of the Workshop on Procedural Content Generation},
+  year={2016}
+}
+```
+
+Also cite this repository when reporting results reproduced from this code. A
+`CITATION.cff` file is included so GitHub can generate a citation entry.
 
 ## Install Dependencies
 

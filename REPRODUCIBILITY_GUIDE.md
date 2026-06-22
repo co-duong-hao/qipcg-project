@@ -4,6 +4,8 @@ This guide explains how to reproduce the dataset experiments for the QI-PCG
 project. The repository does not include the dataset, generated outputs, paper
 files, or internal review notes.
 
+See `DATA_AVAILABILITY.md` for dataset citation and artifact availability.
+
 ## Dataset Layout
 
 Place the VGLC dataset at the project root:

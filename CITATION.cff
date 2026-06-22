@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite the associated QI-PCG paper or this software package."
+title: "qipcg-project: Reproducible QI-PCG Experiment Pipeline"
+type: software
+authors:
+  - family-names: "Co"
+    given-names: "Duong Hao"
+  - family-names: "Van"
+    given-names: "Chau Truong Thuan"
+  - family-names: "Dang"
+    given-names: "Thanh Hung"
+repository-code: "https://github.com/co-duong-hao/qipcg-project"
+date-released: "2026-06-22"
+keywords:
+  - procedural content generation
+  - quantum-inspired algorithm
+  - game level generation
+  - reproducibility
+  - VGLC
