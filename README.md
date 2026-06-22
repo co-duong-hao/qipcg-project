@@ -50,17 +50,19 @@ python experiments\validate_outputs.py --out-dir experiments\output_reproduction
 Only run the full experiment after the smoke test passes. This can take a long
 time.
 
-The paper configuration is recorded in `experiments/reproduction_config.json`.
-Use the command below unchanged when trying to reproduce the paper tables.
+The current paper uses the 30-seed reproduction configuration recorded in
+`experiments/reproduction_config.json`. Use the command below unchanged when
+trying to reproduce the paper tables. It can take a long time, so run the
+smoke test first.
 
 ```powershell
-python experiments\run_experiments.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 10 --ablation-rooms-per-cell 200 --stat-permutations 999 --out-dir experiments\output_reproduction_main
+python experiments\run_experiments.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 30 --ablation-rooms-per-cell 200 --stat-permutations 9999 --out-dir experiments\output_reproduction_seed30
 ```
 
 Validate the full output:
 
 ```powershell
-python experiments\validate_outputs.py --out-dir experiments\output_reproduction_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30 --expected-generated 180000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 ## Optional Fair-Budget Sweeps
@@ -70,7 +72,7 @@ and SA. To reproduce the optional budget/novelty trade-off analysis without
 rerunning the main experiment, run sweeps only:
 
 ```powershell
-python experiments\run_experiments.py --datasets zelda,loderunner --seeds 10 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_reproduction_main
+python experiments\run_experiments.py --datasets zelda,loderunner --seeds 30 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_reproduction_seed30
 ```
 
 This adds:
@@ -85,11 +87,11 @@ combined_novelty_sweep_summary.csv
 Budget sweep uses `8,16,24,32,64` fitness evaluations for QI/GA/SA. Novelty
 sweep uses novelty weights `0,25,50,100` at 24 evaluations.
 
-After running the optional sweeps on top of `output_reproduction_main`, validate them
+After running the optional sweeps on top of `output_reproduction_seed30`, validate them
 with:
 
 ```powershell
-python experiments\validate_outputs.py --out-dir experiments\output_reproduction_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 60000 --expected-novelty-sweep-rows 48000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30 --expected-generated 180000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 180000 --expected-novelty-sweep-rows 144000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 Most content metrics should be reproducible with the same dataset, code commit,
@@ -106,7 +108,7 @@ easier to blur and harder to read.
 After a full run, generate vector figures locally with:
 
 ```powershell
-python experiments\generate_vector_figures.py --out-dir experiments\output_reproduction_main --paper-figures paper\figures
+python experiments\generate_vector_figures.py --out-dir experiments\output_reproduction_seed30 --paper-figures paper\figures
 ```
 
 If you only need to check the dataset pipeline, you do not need to generate
@@ -117,7 +119,7 @@ figures.
 Generated outputs are local-only and ignored by Git. After a full run, check:
 
 ```text
-experiments/output_reproduction_main/
+experiments/output_reproduction_seed30/
   combined_results_detailed.csv
   combined_results_summary.csv
   combined_statistical_tests.csv
@@ -142,6 +144,16 @@ Primary scripts:
 - experiments/validate_outputs.py: validates generated outputs
 - experiments/generate_vector_figures.py: regenerates vector PDF figures from output CSVs
 - experiments/reproduction_config.json: records the paper reproduction configuration
+
+Current paper context:
+- The paper uses the 30-seed reproduction run, not the old 10-seed run.
+- Main generated rows should be 180,000: 2 datasets x 6 methods x 30 seeds x 500 levels.
+- Held-out reference rows should be 111.
+- Ablation rows should be 12,000.
+- Budget sweep rows should be 180,000.
+- Novelty-pressure sweep rows should be 144,000.
+- Statistical tests use 9,999 permutations.
+- The public runner contains seed30 performance optimizations; do not revert them to the older slower implementation.
 
 Default workflow:
 1. Install dependencies from requirements.txt.

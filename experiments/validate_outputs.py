@@ -10,14 +10,14 @@ import pandas as pd
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = ROOT / "experiments" / "output_reproduction_main"
+DEFAULT_OUT = ROOT / "experiments" / "output_reproduction_seed30"
 PAPER = ROOT / "paper" / "main.tex"
 FIGURES = ROOT / "paper" / "figures"
 
 STANDARD_MAIN_CONFIG = {
     "datasets": ["zelda", "loderunner"],
     "rooms_per_method": 500,
-    "seeds": 10,
+    "seeds": 30,
     "seed_start": 42,
     "split_seed": 2026,
     "train_ratio": 0.8,
@@ -41,7 +41,7 @@ STANDARD_MAIN_CONFIG = {
     "ga_generations": 2,
     "mutation_rate": 0.03,
     "sa_steps": 23,
-    "stat_permutations": 999,
+    "stat_permutations": 9999,
 }
 
 STANDARD_ABLATION_CONFIG = {

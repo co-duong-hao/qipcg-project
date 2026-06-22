@@ -63,16 +63,17 @@ configuration is recorded in:
 experiments/reproduction_config.json
 ```
 
-Use this command unchanged when reproducing the paper tables:
+The current paper uses the 30-seed reproduction run. Use this command unchanged
+when reproducing the paper tables:
 
 ```powershell
-python experiments\run_experiments.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 10 --ablation-rooms-per-cell 200 --stat-permutations 999 --out-dir experiments\output_reproduction_main
+python experiments\run_experiments.py --datasets zelda,loderunner --rooms-per-method 500 --seeds 30 --ablation-rooms-per-cell 200 --stat-permutations 9999 --out-dir experiments\output_reproduction_seed30
 ```
 
 Validate the full output:
 
 ```powershell
-python experiments\validate_outputs.py --out-dir experiments\output_reproduction_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30 --expected-generated 180000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 ## Optional Budget and Novelty Sweeps
@@ -81,7 +82,7 @@ These sweeps support fair-budget and novelty-pressure analysis for QI, GA, and
 SA. They are not needed for a basic dataset smoke test.
 
 ```powershell
-python experiments\run_experiments.py --datasets zelda,loderunner --seeds 10 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_reproduction_main
+python experiments\run_experiments.py --datasets zelda,loderunner --seeds 30 --sweep-rooms-per-cell 200 --run-budget-sweep --run-novelty-sweep --sweep-only --out-dir experiments\output_reproduction_seed30
 ```
 
 This adds:
@@ -96,7 +97,7 @@ combined_novelty_sweep_summary.csv
 Validate the full output with sweeps:
 
 ```powershell
-python experiments\validate_outputs.py --out-dir experiments\output_reproduction_main --expected-generated 60000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 60000 --expected-novelty-sweep-rows 48000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30 --expected-generated 180000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expected-budget-sweep-rows 180000 --expected-novelty-sweep-rows 144000 --expected-sweep-cell-n 200 --expect-standard-config --skip-paper
 ```
 
 ## Vector Figures
@@ -107,7 +108,7 @@ figures for final submission artifacts.
 After a full run, regenerate vector figures locally:
 
 ```powershell
-python experiments\generate_vector_figures.py --out-dir experiments\output_reproduction_main --paper-figures paper\figures
+python experiments\generate_vector_figures.py --out-dir experiments\output_reproduction_seed30 --paper-figures paper\figures
 ```
 
 If only validating the dataset pipeline, figure generation is optional.
@@ -117,7 +118,7 @@ If only validating the dataset pipeline, figure generation is optional.
 After the full run, check:
 
 ```text
-experiments/output_reproduction_main/
+experiments/output_reproduction_seed30/
   combined_results_detailed.csv
   combined_results_summary.csv
   combined_statistical_tests.csv
@@ -132,6 +133,12 @@ experiments/output_reproduction_main/
 
 - Content metrics are seeded and should be reproducible with the same dataset,
   code commit, and command.
+- The paper configuration uses seeds 42--71, 9,999 statistical permutations,
+  180,000 generated main rows, 12,000 ablation rows, 180,000 budget-sweep rows,
+  and 144,000 novelty-sweep rows.
+- The public experiment runner includes optimized sampling and metric code for
+  the 30-seed Lode Runner run; keep these optimizations unless replacing them
+  with an equivalent validated implementation.
 - `generation_time` depends on CPU and local environment, so compare it as a
   trend rather than as an exact value across computers.
 - If a full run is interrupted, prefer rerunning with a new `--out-dir` to avoid

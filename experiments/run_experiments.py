@@ -35,6 +35,9 @@ CHAR_FOR_CAT = {
 }
 WALKABLE = {CAT_TO_ID[x] for x in ["path", "enemy", "trap", "door", "goal_or_exit"]}
 IMPORTANT = {CAT_TO_ID["door"], CAT_TO_ID["goal_or_exit"]}
+WALL_ID = CAT_TO_ID["wall"]
+DOOR_ID = CAT_TO_ID["door"]
+GOAL_ID = CAT_TO_ID["goal_or_exit"]
 PATTERN_BINS_2X2 = len(CATEGORIES) ** 4
 
 
@@ -230,20 +233,22 @@ def split_records(records: list[RoomRecord], train_ratio: float, seed: int) -> t
 
 
 def important_cells(grid: np.ndarray) -> list[tuple[int, int]]:
-    coords = np.argwhere(np.isin(grid, list(IMPORTANT)))
+    coords = np.argwhere((grid == DOOR_ID) | (grid == GOAL_ID))
     return [(int(r), int(c)) for r, c in coords]
 
 
-def bfs(grid: np.ndarray, start: tuple[int, int]) -> dict[tuple[int, int], int]:
+def bfs(grid: np.ndarray, start: tuple[int, int]) -> np.ndarray:
     h, w = grid.shape
-    distances = {start: 0}
+    walkable = grid != WALL_ID
+    distances = np.full((h, w), -1, dtype=np.int16)
+    distances[start] = 0
     q = deque([start])
     while q:
         r, c = q.popleft()
         for nr, nc in neighbors(h, w, r, c):
-            if (nr, nc) in distances or int(grid[nr, nc]) not in WALKABLE:
+            if distances[nr, nc] >= 0 or not walkable[nr, nc]:
                 continue
-            distances[(nr, nc)] = distances[(r, c)] + 1
+            distances[nr, nc] = distances[r, c] + 1
             q.append((nr, nc))
     return distances
 
@@ -253,28 +258,29 @@ def playability_and_path(grid: np.ndarray) -> tuple[int, int]:
     if len(cells) < 2:
         return 0, -1
     distances = bfs(grid, cells[0])
-    if any(cell not in distances for cell in cells[1:]):
+    if any(distances[cell] < 0 for cell in cells[1:]):
         return 0, -1
-    return 1, max(distances[cell] for cell in cells)
+    return 1, int(max(distances[cell] for cell in cells))
 
 
 def largest_walkable_component(grid: np.ndarray) -> int:
     h, w = grid.shape
-    seen: set[tuple[int, int]] = set()
+    walkable = grid != WALL_ID
+    seen = np.zeros((h, w), dtype=bool)
     best = 0
     for r in range(h):
         for c in range(w):
-            if int(grid[r, c]) not in WALKABLE or (r, c) in seen:
+            if not walkable[r, c] or seen[r, c]:
                 continue
             q = deque([(r, c)])
-            seen.add((r, c))
+            seen[r, c] = True
             size = 0
             while q:
                 cr, cc = q.popleft()
                 size += 1
                 for nr, nc in neighbors(h, w, cr, cc):
-                    if (nr, nc) not in seen and int(grid[nr, nc]) in WALKABLE:
-                        seen.add((nr, nc))
+                    if not seen[nr, nc] and walkable[nr, nc]:
+                        seen[nr, nc] = True
                         q.append((nr, nc))
             best = max(best, size)
     return best
@@ -293,16 +299,10 @@ def entropy(grid: np.ndarray) -> float:
 
 def pattern_distribution(grid: np.ndarray) -> np.ndarray:
     h, w = grid.shape
-    counts = np.zeros(PATTERN_BINS_2X2, dtype=float)
     if h < 2 or w < 2:
-        return counts
-    for r in range(h - 1):
-        for c in range(w - 1):
-            a = int(grid[r, c])
-            b = int(grid[r, c + 1])
-            d = int(grid[r + 1, c])
-            e = int(grid[r + 1, c + 1])
-            counts[((a * 6 + b) * 6 + d) * 6 + e] += 1.0
+        return np.zeros(PATTERN_BINS_2X2, dtype=float)
+    codes = (((grid[:-1, :-1] * 6 + grid[:-1, 1:]) * 6 + grid[1:, :-1]) * 6 + grid[1:, 1:]).ravel()
+    counts = np.bincount(codes, minlength=PATTERN_BINS_2X2).astype(float)
     total = counts.sum()
     return counts / total if total else counts
 
@@ -331,20 +331,18 @@ def difficulty_score(grid: np.ndarray, shortest_path: int) -> float:
 
 
 def path_diversity(grid: np.ndarray) -> float:
-    h, w = grid.shape
-    walkable = np.isin(grid, list(WALKABLE))
+    walkable = grid != WALL_ID
     walkable_count = int(walkable.sum())
     if walkable_count == 0:
         return 0.0
-    branch = []
-    for r in range(h):
-        for c in range(w):
-            if not walkable[r, c]:
-                continue
-            degree = sum(1 for nr, nc in neighbors(h, w, r, c) if walkable[nr, nc])
-            branch.append(max(0, degree - 1) / 3.0)
+    degree = np.zeros(grid.shape, dtype=np.int16)
+    degree[:-1, :] += walkable[1:, :]
+    degree[1:, :] += walkable[:-1, :]
+    degree[:, :-1] += walkable[:, 1:]
+    degree[:, 1:] += walkable[:, :-1]
+    branch = np.maximum(0, degree[walkable] - 1) / 3.0
     component = largest_walkable_component(grid) / walkable_count
-    return float(0.65 * statistics.fmean(branch) + 0.35 * component)
+    return float(0.65 * float(np.mean(branch)) + 0.35 * component)
 
 
 def door_score(grid: np.ndarray, uses_doors: bool) -> float:
@@ -458,12 +456,10 @@ def sample_from_positional(rng: np.random.Generator, stats_data: dict) -> np.nda
 
 
 def sample_from_probs(rng: np.random.Generator, probs: np.ndarray) -> np.ndarray:
-    h, w, _ = probs.shape
-    grid = np.zeros((h, w), dtype=np.int16)
-    for r in range(h):
-        for c in range(w):
-            grid[r, c] = int(rng.choice(len(CATEGORIES), p=probs[r, c]))
-    return grid
+    cumulative = np.cumsum(probs, axis=2)
+    draws = rng.random(probs.shape[:2])[..., None]
+    grid = np.sum(draws > cumulative, axis=2)
+    return np.minimum(grid, len(CATEGORIES) - 1).astype(np.int16)
 
 
 def uniform_random(rng: np.random.Generator, stats_data: dict, target: float, params: dict) -> np.ndarray:
@@ -1401,9 +1397,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Multi-dataset quantum-inspired PCG experiment runner.")
     parser.add_argument("--vglc-root", type=Path, default=Path("TheVGLC"))
     parser.add_argument("--datasets", default="zelda,loderunner")
-    parser.add_argument("--out-dir", type=Path, default=Path("experiments") / "output_reproduction")
+    parser.add_argument("--out-dir", type=Path, default=Path("experiments") / "output_reproduction_seed30")
     parser.add_argument("--rooms-per-method", type=int, default=500)
-    parser.add_argument("--seeds", type=int, default=10)
+    parser.add_argument("--seeds", type=int, default=30)
     parser.add_argument("--seed-start", type=int, default=42)
     parser.add_argument("--split-seed", type=int, default=2026)
     parser.add_argument("--train-ratio", type=float, default=0.8)
@@ -1421,7 +1417,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mutation-rate", type=float, default=0.03)
     parser.add_argument("--sa-steps", type=int, default=23)
     parser.add_argument("--ablation-rooms-per-cell", type=int, default=200)
-    parser.add_argument("--stat-permutations", type=int, default=999)
+    parser.add_argument("--stat-permutations", type=int, default=9999)
     parser.add_argument("--skip-ablation", action="store_true")
     parser.add_argument("--ablation-only", action="store_true", help="Run only ablation outputs for the selected datasets.")
     parser.add_argument("--run-budget-sweep", action="store_true", help="Run QI/GA/SA quality curves over multiple fitness budgets.")
