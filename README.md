@@ -10,6 +10,7 @@ Repository scope:
 - reproduce the current 30-seed experiment configuration;
 - validate generated CSV outputs and statistical-test files;
 - regenerate vector PDF figures locally when needed;
+- prepare an optional blinded mini human-study pack from generated outputs;
 - support team members and reviewers who want to inspect the experiment
   pipeline.
 
@@ -36,12 +37,15 @@ held-out reference rows: 111
 ablation rows: 12,000
 budget sweep rows: 180,000
 novelty-pressure sweep rows: 144,000
+primary novelty metric: 2x2 n-gram Jensen-Shannon divergence
 statistical permutations: 9,999
 ```
 
 The implementation includes optimized sampling and metric code required for the
-30-seed Lode Runner run. Do not revert these optimizations unless replacing them
-with an equivalent validated implementation.
+30-seed Lode Runner run. The primary `novelty` column uses the 2x2 n-gram
+Jensen-Shannon metric by default; the legacy cell-wise Hamming value is exported
+as `novelty_hamming` for comparison. Do not revert these optimizations unless
+replacing them with an equivalent validated implementation.
 
 ## Dataset Setup
 
@@ -51,6 +55,7 @@ Place the VGLC dataset at the project root with this structure:
 TheVGLC/
   The Legend of Zelda/Processed/
   Lode Runner/Processed/
+  Super Mario Bros/Processed/        # optional third-domain extension
 ```
 
 Do not commit `TheVGLC/`; it is ignored by Git.
@@ -169,6 +174,98 @@ python experiments\generate_vector_figures.py --out-dir experiments\output_repro
 If you only need to check the dataset pipeline, you do not need to generate
 figures.
 
+## Optional Super Mario Bros Domain
+
+The runner also supports a third VGLC domain, `mario`, for cross-domain
+structural validation beyond Zelda and Lode Runner. Super Mario Bros levels are
+long platformer maps, so the adapter slices each processed level into
+non-overlapping `14 x 16` windows and evaluates playability with a simple
+left-to-right structural reachability proxy.
+
+Three-domain smoke test:
+
+```powershell
+python experiments\run_experiments.py --datasets zelda,loderunner,mario --out-dir experiments\output_mario_domain_smoke --rooms-per-method 2 --seeds 1 --ablation-rooms-per-cell 1 --stat-permutations 19 --skip-ablation
+python experiments\validate_outputs.py --out-dir experiments\output_mario_domain_smoke --expected-generated 36 --expected-reference 149 --skip-paper
+```
+
+Three-domain full run, if you want to create a new extended result set:
+
+```powershell
+python experiments\run_experiments.py --datasets zelda,loderunner,mario --rooms-per-method 500 --seeds 30 --ablation-rooms-per-cell 200 --stat-permutations 9999 --out-dir experiments\output_reproduction_seed30_mario
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30_mario --expected-generated 270000 --expected-reference 149 --expected-ablation-rows 18000 --expected-ablation-cell-n 200 --skip-paper
+```
+
+This is an extension path, not the current two-domain paper reproduction
+configuration. Do not use `--expect-standard-config` when validating a
+three-domain output unless the standard config is intentionally updated.
+
+## Optional Mini Human Study
+
+The repository includes optional materials for a blinded mini human study with
+15--20 participants. This is not required for reproducing the paper tables.
+
+The original static visual-rating workflow has been archived under
+`human_study_archive/static_perceptual_study_2026-06-26/`. New participant-facing
+work should use the simplified blinded playtest workflow in
+`human_study_playtest/`.
+
+Build the playtest form from the existing blinded stimulus pack:
+
+```powershell
+python experiments\build_playtest_form.py --study-pack human_study\study_pack_seed2026 --out-dir human_study_playtest\playtest_pack_seed2026
+```
+
+Validate the playtest files and analyze exported responses with:
+
+```powershell
+python experiments\validate_playtest_study.py --source-study-pack human_study\study_pack_seed2026 --playtest-pack human_study_playtest\playtest_pack_seed2026
+python experiments\analyze_playtest_study.py --responses human_study_playtest\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study_playtest\results_seed2026
+```
+
+The playtest is a simplified grid-navigation proxy, not a faithful
+implementation of Zelda or Lode Runner mechanics.
+
+After a full run exists, create a blinded 24-stimulus pack:
+
+```powershell
+python experiments\create_human_study_pack.py --input-csv experiments\output_reproduction_seed30\combined_results_detailed.csv --out-dir human_study\study_pack_seed2026
+```
+
+Validate the pack before sending it to anyone:
+
+```powershell
+python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
+```
+
+Optionally build a self-contained HTML survey form:
+
+```powershell
+python experiments\build_human_study_form.py --study-pack human_study\study_pack_seed2026
+python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
+```
+
+Give the form builder only `README_FOR_FORM_BUILDER.md`,
+`stimuli_manifest_blinded.csv`, `stimuli/`, `rating_sheet_template.csv`, and
+`survey_questions.md`. If using the HTML route, share `survey_form.html` with
+participants. Do not share `coordinator_notes_private.md` or
+`answer_key_private.csv` until all responses are collected.
+
+After exporting responses as CSV, validate them:
+
+```powershell
+python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026 --responses human_study\responses.csv
+```
+
+After exporting responses as CSV, analyze them with:
+
+```powershell
+python experiments\analyze_human_study.py --responses human_study\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study\results_seed2026
+```
+
+See `human_study/README.md` for the full protocol. Generated study packs and
+results are local artifacts and are ignored by Git.
+
 ## Important Outputs
 
 Generated outputs are local-only and ignored by Git. After a full run, check:
@@ -193,11 +290,19 @@ Copy this prompt into Codex when working on this repository:
 You are helping with the qipcg-project repository. This repo is only for running and validating the dataset experiment pipeline for the QI-PCG paper. Do not ask for paper files or private review files; they are intentionally not committed. The dataset is also not committed. Assume the user will place VGLC locally at ./TheVGLC with:
 - TheVGLC/The Legend of Zelda/Processed/
 - TheVGLC/Lode Runner/Processed/
+- Optional extension: TheVGLC/Super Mario Bros/Processed/
 
 Primary scripts:
 - experiments/run_experiments.py: runs the experiment pipeline
 - experiments/validate_outputs.py: validates generated outputs
 - experiments/generate_vector_figures.py: regenerates vector PDF figures from output CSVs
+- experiments/create_human_study_pack.py: creates a blinded optional mini human-study pack from generated outputs
+- experiments/build_playtest_form.py: creates a self-contained simplified playable HTML study from the blinded pack
+- experiments/validate_playtest_study.py: validates playtest blinding, pack balance, and response completeness
+- experiments/analyze_playtest_study.py: analyzes exported playtest responses
+- experiments/build_human_study_form.py: creates the legacy self-contained static HTML survey from the blinded pack
+- experiments/validate_human_study.py: validates human-study blinding, stimulus balance, and response completeness
+- experiments/analyze_human_study.py: analyzes exported human-study responses
 - experiments/reproduction_config.json: records the paper reproduction configuration
 
 Current paper context:
@@ -209,6 +314,7 @@ Current paper context:
 - Novelty-pressure sweep rows should be 144,000.
 - Statistical tests use 9,999 permutations.
 - The public runner contains seed30 performance optimizations; do not revert them to the older slower implementation.
+- Super Mario Bros is supported as an optional third-domain extension named `mario`; it slices processed Mario levels into 14 x 16 windows and uses a left-to-right structural playability proxy. Do not treat this as part of the default paper reproduction unless explicitly requested.
 
 Default workflow:
 1. Install dependencies from requirements.txt.
@@ -218,7 +324,8 @@ Default workflow:
 5. Validate full outputs with --expect-standard-config when reproducing paper numbers.
 6. Run optional sweeps with --run-budget-sweep --run-novelty-sweep --sweep-only only when checking fair-budget and novelty-pressure analysis.
 7. If figures are needed for paper/report, generate vector PDF figures with experiments/generate_vector_figures.py. Do not use PNG raster figures for final paper/report.
-8. Do not commit outputs, dataset, paper, or internal review notes.
+8. For optional human-study work, create a blinded pack with experiments/create_human_study_pack.py, build playtest_form.html with experiments/build_playtest_form.py, validate it with experiments/validate_playtest_study.py, and keep answer_key_private.csv hidden from participants until responses are complete.
+9. Do not commit outputs, dataset, paper, human-study packs/results, or internal review notes.
 
 Timing columns are machine-dependent; do not expect generation_time values to match exactly across computers.
 

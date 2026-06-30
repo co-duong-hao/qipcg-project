@@ -50,6 +50,8 @@ class DatasetSpec:
     kind: str
     raw_to_cat: dict[str, str]
     uses_doors: bool
+    playability_kind: str = "important_reachability"
+    window_stride: int = 0
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,31 @@ def dataset_specs(root: Path) -> dict[str, DatasetSpec]:
                 "b": "wall",
             },
         ),
+        "mario": DatasetSpec(
+            name="mario",
+            path=root / "Super Mario Bros" / "Processed",
+            height=14,
+            width=16,
+            kind="mario_windows",
+            uses_doors=False,
+            playability_kind="horizontal_reachability",
+            window_stride=16,
+            raw_to_cat={
+                "-": "path",
+                "o": "path",
+                "E": "enemy",
+                "Q": "goal_or_exit",
+                "?": "goal_or_exit",
+                "X": "wall",
+                "S": "wall",
+                "[": "wall",
+                "]": "wall",
+                "<": "wall",
+                ">": "wall",
+                "B": "wall",
+                "b": "wall",
+            },
+        ),
     }
 
 
@@ -124,6 +151,8 @@ def load_dataset(spec: DatasetSpec) -> tuple[list[RoomRecord], dict]:
         return load_zelda(spec)
     if spec.kind == "fixed_levels":
         return load_fixed_levels(spec)
+    if spec.kind == "mario_windows":
+        return load_mario_windows(spec)
     raise ValueError(f"unknown dataset kind: {spec.kind}")
 
 
@@ -224,6 +253,78 @@ def load_fixed_levels(spec: DatasetSpec) -> tuple[list[RoomRecord], dict]:
     return records, meta
 
 
+def window_starts(width: int, window_width: int, stride: int) -> list[int]:
+    if width < window_width:
+        return []
+    starts = list(range(0, width - window_width + 1, stride))
+    final_start = width - window_width
+    if not starts or starts[-1] != final_start:
+        starts.append(final_start)
+    return starts
+
+
+def load_mario_windows(spec: DatasetSpec) -> tuple[list[RoomRecord], dict]:
+    records: list[RoomRecord] = []
+    removed = Counter()
+    dimensions = []
+    raw_counts = Counter()
+    candidates = 0
+    stride = spec.window_stride or spec.width
+    for path in sorted(spec.path.glob("*.txt")):
+        rows = [line.rstrip("\n") for line in path.read_text(encoding="utf-8").splitlines() if line.rstrip("\n")]
+        h = len(rows)
+        w_min = min((len(row) for row in rows), default=0)
+        w_max = max((len(row) for row in rows), default=0)
+        starts = window_starts(w_min, spec.width, stride) if h == spec.height and w_min == w_max else []
+        dimensions.append(
+            {
+                "file": path.name,
+                "height": h,
+                "width": w_max,
+                "window_width": spec.width,
+                "stride": stride,
+                "candidate_windows": len(starts),
+            }
+        )
+        for row in rows:
+            raw_counts.update(row)
+        if h != spec.height or w_min != w_max:
+            removed["wrong_size_or_ragged"] += 1
+            continue
+        for start in starts:
+            candidates += 1
+            raw_window = [row[start : start + spec.width] for row in rows]
+            cats = [spec.raw_to_cat.get(ch, "unknown") for row in raw_window for ch in row]
+            counts = Counter(cats)
+            if counts["unknown"]:
+                removed["unknown_symbol"] += 1
+                continue
+            if len(counts) == 1:
+                removed["single_category"] += 1
+                continue
+            if counts["path"] == 0:
+                removed["no_path"] += 1
+                continue
+            ids = [CAT_TO_ID[cat] for cat in cats]
+            grid = np.array(ids, dtype=np.int16).reshape(spec.height, spec.width)
+            records.append(RoomRecord(spec.name, path.name, 0, start, grid))
+    meta = {
+        "dataset": spec.name,
+        "dataset_dir": str(spec.path),
+        "files": len(list(spec.path.glob("*.txt"))),
+        "dimensions": dimensions,
+        "raw_symbol_counts": dict(raw_counts),
+        "total_candidates": candidates,
+        "clean_rooms": len(records),
+        "removed": dict(removed),
+        "room_size": [spec.height, spec.width],
+        "window_stride": stride,
+        "categories": CATEGORIES,
+        "playability_kind": spec.playability_kind,
+    }
+    return records, meta
+
+
 def split_records(records: list[RoomRecord], train_ratio: float, seed: int) -> tuple[list[RoomRecord], list[RoomRecord]]:
     rng = random.Random(seed)
     shuffled = list(records)
@@ -253,7 +354,9 @@ def bfs(grid: np.ndarray, start: tuple[int, int]) -> np.ndarray:
     return distances
 
 
-def playability_and_path(grid: np.ndarray) -> tuple[int, int]:
+def playability_and_path(grid: np.ndarray, playability_kind: str = "important_reachability") -> tuple[int, int]:
+    if playability_kind == "horizontal_reachability":
+        return horizontal_reachability_and_path(grid)
     cells = important_cells(grid)
     if len(cells) < 2:
         return 0, -1
@@ -261,6 +364,32 @@ def playability_and_path(grid: np.ndarray) -> tuple[int, int]:
     if any(distances[cell] < 0 for cell in cells[1:]):
         return 0, -1
     return 1, int(max(distances[cell] for cell in cells))
+
+
+def horizontal_reachability_and_path(grid: np.ndarray) -> tuple[int, int]:
+    h, w = grid.shape
+    walkable = grid != WALL_ID
+    left = [(r, 0) for r in range(h) if walkable[r, 0]]
+    right = {(r, w - 1) for r in range(h) if walkable[r, w - 1]}
+    if not left or not right:
+        return 0, -1
+    distances = np.full(grid.shape, -1, dtype=np.int32)
+    q: deque[tuple[int, int]] = deque()
+    for cell in left:
+        distances[cell] = 0
+        q.append(cell)
+    best = -1
+    while q:
+        r, c = q.popleft()
+        if (r, c) in right:
+            best = int(distances[r, c])
+            break
+        for nr, nc in neighbors(h, w, r, c):
+            if distances[nr, nc] >= 0 or not walkable[nr, nc]:
+                continue
+            distances[nr, nc] = distances[r, c] + 1
+            q.append((nr, nc))
+    return (1, best) if best >= 0 else (0, -1)
 
 
 def largest_walkable_component(grid: np.ndarray) -> int:
@@ -315,9 +444,56 @@ def pattern_similarity(grid: np.ndarray, benchmark_pattern_dist: np.ndarray) -> 
     return float(max(0.0, 1.0 - 0.5 * np.abs(pattern_distribution(grid) - benchmark_pattern_dist).sum()))
 
 
-def novelty(grid: np.ndarray, train_flat: np.ndarray) -> float:
+def novelty_hamming(grid: np.ndarray, train_flat: np.ndarray) -> float:
     flat = grid.ravel()
     return float(np.min(np.mean(train_flat != flat, axis=1)))
+
+
+def entropy_distribution(dist: np.ndarray) -> float:
+    positive = dist[dist > 0]
+    if positive.size == 0:
+        return 0.0
+    return float(-np.sum(positive * np.log2(positive)))
+
+
+def js_divergence_to_many(dist: np.ndarray, reference_dists: np.ndarray) -> np.ndarray:
+    p = dist.astype(np.float32, copy=False)
+    p_sum = float(p.sum())
+    if p_sum <= 0.0:
+        return np.zeros(reference_dists.shape[0], dtype=np.float32)
+    p = p / p_sum
+    q = reference_dists
+    m = 0.5 * (q + p)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        entropy_m = -np.sum(np.where(m > 0.0, m * np.log2(m), 0.0), axis=1)
+    entropy_p = entropy_distribution(p)
+    return entropy_m - 0.5 * entropy_p
+
+
+def novelty_ngram_js(grid: np.ndarray, train_pattern_dists: np.ndarray, train_pattern_entropies: np.ndarray | None = None) -> float:
+    """Shift-tolerant novelty from 2x2 n-gram distribution distance.
+
+    Hamming novelty compares cells at identical coordinates, so a translated
+    structure can look artificially novel. This metric compares local 2x2 tile
+    n-gram distributions instead and returns the closest Jensen-Shannon
+    divergence to the training set. With log base 2, the value is in [0, 1].
+    """
+    dist = pattern_distribution(grid)
+    divergences = js_divergence_to_many(dist, train_pattern_dists)
+    if train_pattern_entropies is None:
+        train_pattern_entropies = np.array([entropy_distribution(row) for row in train_pattern_dists], dtype=np.float32)
+    if train_pattern_entropies is not None:
+        divergences = divergences - 0.5 * train_pattern_entropies
+    return float(max(0.0, np.min(divergences)))
+
+
+def novelty(grid: np.ndarray, stats_data: dict) -> float:
+    metric = stats_data.get("novelty_metric", "ngram_js")
+    if metric == "hamming":
+        return novelty_hamming(grid, stats_data["train_flat"])
+    if metric == "ngram_js":
+        return novelty_ngram_js(grid, stats_data["train_pattern_dists"], stats_data["train_pattern_entropies"])
+    raise ValueError(f"Unknown novelty metric: {metric}")
 
 
 def difficulty_score(grid: np.ndarray, shortest_path: int) -> float:
@@ -364,8 +540,10 @@ def goal_score(grid: np.ndarray) -> float:
 
 
 def evaluate_grid(grid: np.ndarray, stats_data: dict, target: float) -> dict[str, float | int]:
-    playable, shortest = playability_and_path(grid)
+    playable, shortest = playability_and_path(grid, stats_data.get("playability_kind", "important_reachability"))
     diff = difficulty_score(grid, shortest)
+    novelty_ngram = novelty_ngram_js(grid, stats_data["train_pattern_dists"], stats_data["train_pattern_entropies"])
+    novelty_value = novelty_hamming(grid, stats_data["train_flat"]) if stats_data.get("novelty_metric") == "hamming" else novelty_ngram
     return {
         "playability": playable,
         "shortest_path_length": shortest,
@@ -373,7 +551,9 @@ def evaluate_grid(grid: np.ndarray, stats_data: dict, target: float) -> dict[str
         "target_difficulty_error": abs(diff - target),
         "tile_diversity": entropy(grid),
         "path_diversity": path_diversity(grid),
-        "novelty": novelty(grid, stats_data["train_flat"]),
+        "novelty": novelty_value,
+        "novelty_ngram_js": novelty_ngram,
+        "novelty_hamming": novelty_hamming(grid, stats_data["train_flat"]),
         "style_similarity": style_similarity(grid, stats_data["global_dist"]),
         "pattern_similarity_2x2": pattern_similarity(grid, stats_data["pattern_dist"]),
     }
@@ -386,12 +566,12 @@ def fitness(
     ablation: str = "full",
     novelty_weight: float = 0.0,
 ) -> float:
-    playable, shortest = playability_and_path(grid)
+    playable, shortest = playability_and_path(grid, stats_data.get("playability_kind", "important_reachability"))
     diff = difficulty_score(grid, shortest)
     style = style_similarity(grid, stats_data["global_dist"])
     patt = pattern_similarity(grid, stats_data["pattern_dist"])
     pdiv = path_diversity(grid)
-    novelty_score = novelty(grid, stats_data["train_flat"]) if novelty_weight else 0.0
+    novelty_score = novelty(grid, stats_data) if novelty_weight else 0.0
     weights = {
         "playability": 100.0,
         "style": 35.0,
@@ -424,7 +604,7 @@ def fitness(
     )
 
 
-def build_stats(train: list[RoomRecord], test: list[RoomRecord], spec: DatasetSpec) -> dict:
+def build_stats(train: list[RoomRecord], test: list[RoomRecord], spec: DatasetSpec, novelty_metric: str = "ngram_js") -> dict:
     train_grids = np.stack([record.grid for record in train])
     test_grids = np.stack([record.grid for record in test])
     train_flat = train_grids.reshape(len(train_grids), spec.height * spec.width)
@@ -436,18 +616,25 @@ def build_stats(train: list[RoomRecord], test: list[RoomRecord], spec: DatasetSp
             cell_counts = np.bincount(train_grids[:, r, c], minlength=len(CATEGORIES)).astype(float) + 1.0
             positional[r, c] = cell_counts / cell_counts.sum()
     pattern_dist = np.zeros(PATTERN_BINS_2X2, dtype=float)
-    for grid in train_grids:
-        pattern_dist += pattern_distribution(grid)
+    train_pattern_dists = np.zeros((len(train_grids), PATTERN_BINS_2X2), dtype=np.float32)
+    for idx, grid in enumerate(train_grids):
+        train_pattern_dists[idx] = pattern_distribution(grid)
+        pattern_dist += train_pattern_dists[idx]
     pattern_dist = pattern_dist / max(1, len(train_grids))
+    train_pattern_entropies = np.array([entropy_distribution(row) for row in train_pattern_dists], dtype=np.float32)
     return {
         "spec": spec,
         "uses_doors": spec.uses_doors,
         "train_grids": train_grids,
         "test_grids": test_grids,
         "train_flat": train_flat,
+        "train_pattern_dists": train_pattern_dists,
+        "train_pattern_entropies": train_pattern_entropies,
         "global_dist": global_dist,
         "positional_prior": positional,
         "pattern_dist": pattern_dist,
+        "novelty_metric": novelty_metric,
+        "playability_kind": spec.playability_kind,
     }
 
 
@@ -588,7 +775,9 @@ METRIC_LABELS = {
     "playability": "Playability",
     "style_similarity": "Style similarity",
     "generation_time": "Generation time (s)",
-    "novelty": "Novelty",
+    "novelty": "Novelty (2x2 n-gram JS)",
+    "novelty_ngram_js": "Novelty (2x2 n-gram JS)",
+    "novelty_hamming": "Novelty (cell Hamming)",
     "pattern_similarity_2x2": "2x2 pattern similarity",
 }
 METRICS = [
@@ -599,6 +788,8 @@ METRICS = [
     "tile_diversity",
     "path_diversity",
     "novelty",
+    "novelty_ngram_js",
+    "novelty_hamming",
     "style_similarity",
     "pattern_similarity_2x2",
     "fitness_evaluations",
@@ -1300,7 +1491,7 @@ def process_dataset(
 ) -> tuple[list[dict], list[dict], list[dict], list[dict], list[dict], list[dict], list[dict], list[dict], list[dict]]:
     records, meta = load_dataset(spec)
     train, test = split_records(records, args.train_ratio, args.split_seed)
-    stats_data = build_stats(train, test, spec)
+    stats_data = build_stats(train, test, spec, args.novelty_metric)
     out_dir = root_out / spec.name
     out_dir.mkdir(parents=True, exist_ok=True)
     write_json(
@@ -1412,6 +1603,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--quantum-min-prob", type=float, default=0.005)
     parser.add_argument("--quantum-prior-anchor", type=float, default=0.05)
     parser.add_argument("--novelty-weight", type=float, default=0.0)
+    parser.add_argument("--novelty-metric", choices=["ngram_js", "hamming"], default="ngram_js")
     parser.add_argument("--ga-population", type=int, default=8)
     parser.add_argument("--ga-generations", type=int, default=2)
     parser.add_argument("--mutation-rate", type=float, default=0.03)
@@ -1460,6 +1652,7 @@ def main() -> None:
                 "quantum_min_prob": args.quantum_min_prob,
                 "quantum_prior_anchor": args.quantum_prior_anchor,
                 "novelty_weight": args.novelty_weight,
+                "novelty_metric": args.novelty_metric,
                 "ga_population": args.ga_population,
                 "ga_generations": args.ga_generations,
                 "mutation_rate": args.mutation_rate,
@@ -1482,6 +1675,7 @@ def main() -> None:
                 "methods": SEARCH_METHODS,
                 "fitness_budgets": parse_int_list(args.budget_sweep_values),
                 "novelty_weight": args.novelty_weight,
+                "novelty_metric": args.novelty_metric,
                 "seeds": args.seeds,
                 "seed_start": args.seed_start,
             },
@@ -1494,6 +1688,7 @@ def main() -> None:
                 "methods": SEARCH_METHODS,
                 "fitness_budget": args.k,
                 "novelty_weights": parse_float_list(args.novelty_sweep_weights),
+                "novelty_metric": args.novelty_metric,
                 "seeds": args.seeds,
                 "seed_start": args.seed_start,
             },
@@ -1509,7 +1704,7 @@ def main() -> None:
             print(f"running sweeps dataset={dataset}", flush=True)
             records, _ = load_dataset(specs[dataset])
             train, test = split_records(records, args.train_ratio, args.split_seed)
-            stats_data = build_stats(train, test, specs[dataset])
+            stats_data = build_stats(train, test, specs[dataset], args.novelty_metric)
             out_dir = args.out_dir / dataset
             out_dir.mkdir(parents=True, exist_ok=True)
             if args.run_budget_sweep:
@@ -1559,7 +1754,7 @@ def main() -> None:
             print(f"running ablation dataset={dataset}", flush=True)
             records, _ = load_dataset(specs[dataset])
             train, test = split_records(records, args.train_ratio, args.split_seed)
-            stats_data = build_stats(train, test, specs[dataset])
+            stats_data = build_stats(train, test, specs[dataset], args.novelty_metric)
             out_dir = args.out_dir / dataset
             out_dir.mkdir(parents=True, exist_ok=True)
             ablation_detail = run_ablation(dataset, stats_data, args)

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUT = ROOT / "experiments" / "output_reproduction_seed30"
 PAPER = ROOT / "paper" / "main.tex"
 FIGURES = ROOT / "paper" / "figures"
+ALLOWED_DATASETS = {"zelda", "loderunner", "mario"}
 
 STANDARD_MAIN_CONFIG = {
     "datasets": ["zelda", "loderunner"],
@@ -37,6 +38,7 @@ STANDARD_MAIN_CONFIG = {
     "quantum_min_prob": 0.005,
     "quantum_prior_anchor": 0.05,
     "novelty_weight": 0.0,
+    "novelty_metric": "ngram_js",
     "ga_population": 8,
     "ga_generations": 2,
     "mutation_rate": 0.03,
@@ -97,7 +99,7 @@ def main() -> int:
     summary = pd.read_csv(out_dir / "combined_results_summary.csv")
     tests = pd.read_csv(out_dir / "combined_statistical_tests.csv")
 
-    require(set(detail["dataset"].unique()).issubset({"zelda", "loderunner"}), "Unexpected dataset name")
+    require(set(detail["dataset"].unique()).issubset(ALLOWED_DATASETS), "Unexpected dataset name")
     require(detail.isna().sum().sum() == 0, "Detailed results contain NaN values")
     require(summary.isna().sum().sum() == 0, "Summary results contain NaN values")
     require(tests["p_value"].isna().sum() == 0, "Statistical tests contain NaN p-values")
@@ -105,6 +107,12 @@ def main() -> int:
     require("significant_holm_0_05" in tests.columns, "Missing Holm significance column")
     require("fitness_evaluations" in detail.columns, "Missing fitness_evaluations in detailed results")
     require("fitness_evaluations_mean" in summary.columns, "Missing fitness_evaluations in summary")
+    require("novelty" in detail.columns, "Missing primary novelty column")
+    require("novelty_ngram_js" in detail.columns, "Missing n-gram JS novelty column")
+    require("novelty_hamming" in detail.columns, "Missing legacy Hamming novelty column")
+    require(((detail["novelty"] >= 0) & (detail["novelty"] <= 1)).all(), "Primary novelty should be in [0, 1]")
+    require(((detail["novelty_ngram_js"] >= 0) & (detail["novelty_ngram_js"] <= 1)).all(), "n-gram JS novelty should be in [0, 1]")
+    require(((detail["novelty_hamming"] >= 0) & (detail["novelty_hamming"] <= 1)).all(), "Hamming novelty should be in [0, 1]")
 
     generated = int((detail["is_reference"] == 0).sum())
     reference = int((detail["is_reference"] == 1).sum())

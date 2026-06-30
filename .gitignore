@@ -4,6 +4,12 @@ TheVGLC/
 # Experiment outputs and generated artifacts.
 experiments/output*/
 experiments/smoke*/
+human_study/study_pack*/
+human_study/results*/
+human_study_archive/
+human_study_playtest/playtest_pack*/
+human_study_playtest/results*/
+human_study_playtest/responses*.csv
 
 # Python cache.
 __pycache__/
@@ -15,6 +21,11 @@ tmp/
 paper/
 *review*
 *internal*
+internal_experiment_upgrades/
+internal_review_feedback/
+internal_team_contributions/
+.agents/
+.codex/
 
 # Logs and local OS files.
 *.log

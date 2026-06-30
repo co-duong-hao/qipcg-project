@@ -44,7 +44,7 @@ METRIC_LABELS = {
     "playability": "Playability",
     "generation_time": "Generation time (seconds)",
     "style_similarity": "Style similarity",
-    "novelty": "Novelty",
+    "novelty": "Novelty (2x2 n-gram JS)",
     "pattern_similarity_2x2": "2x2 pattern similarity",
 }
 COLORS = {

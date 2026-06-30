@@ -14,6 +14,7 @@ Place the VGLC dataset at the project root:
 TheVGLC/
   The Legend of Zelda/Processed/
   Lode Runner/Processed/
+  Super Mario Bros/Processed/        # optional third-domain extension
 ```
 
 Do not rename these dataset folders. The experiment scripts expect the VGLC
@@ -115,6 +116,113 @@ python experiments\generate_vector_figures.py --out-dir experiments\output_repro
 
 If only validating the dataset pipeline, figure generation is optional.
 
+## Optional Super Mario Bros Domain
+
+The experiment runner supports `mario` as an optional third domain. Because
+Super Mario Bros processed levels are long platformer maps rather than fixed
+rooms, the loader slices them into non-overlapping `14 x 16` windows and uses a
+left-to-right structural reachability proxy for playability.
+
+Smoke test the three-domain setup:
+
+```powershell
+python experiments\run_experiments.py --datasets zelda,loderunner,mario --out-dir experiments\output_mario_domain_smoke --rooms-per-method 2 --seeds 1 --ablation-rooms-per-cell 1 --stat-permutations 19 --skip-ablation
+python experiments\validate_outputs.py --out-dir experiments\output_mario_domain_smoke --expected-generated 36 --expected-reference 149 --skip-paper
+```
+
+Run a separate three-domain full experiment only when you intend to produce a
+new extended result set:
+
+```powershell
+python experiments\run_experiments.py --datasets zelda,loderunner,mario --rooms-per-method 500 --seeds 30 --ablation-rooms-per-cell 200 --stat-permutations 9999 --out-dir experiments\output_reproduction_seed30_mario
+python experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30_mario --expected-generated 270000 --expected-reference 149 --expected-ablation-rows 18000 --expected-ablation-cell-n 200 --skip-paper
+```
+
+The standard reproduction config remains the two-domain Zelda/Lode Runner
+configuration, so skip `--expect-standard-config` for this optional extension.
+
+## Optional Mini Human Study
+
+The optional mini human study uses generated outputs from the full run. It
+creates a blinded stimulus pack for 15--20 participants. New participant-facing
+work should use the simplified playtest workflow in `human_study_playtest/`.
+The older static visual-rating workflow is preserved under
+`human_study_archive/static_perceptual_study_2026-06-26/`.
+
+Create the blinded pack:
+
+```powershell
+python experiments\create_human_study_pack.py --input-csv experiments\output_reproduction_seed30\combined_results_detailed.csv --out-dir human_study\study_pack_seed2026
+```
+
+The pack contains public survey materials plus a private answer key:
+
+```text
+human_study/study_pack_seed2026/
+  stimuli/
+  README_FOR_FORM_BUILDER.md
+  stimuli_manifest_blinded.csv
+  survey_questions.md
+  rating_sheet_template.csv
+  coordinator_notes_private.md
+  answer_key_private.csv
+```
+
+Validate the pack before sharing survey materials:
+
+```powershell
+python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
+```
+
+Build and validate the simplified playable HTML study:
+
+```powershell
+python experiments\build_playtest_form.py --study-pack human_study\study_pack_seed2026 --out-dir human_study_playtest\playtest_pack_seed2026
+python experiments\validate_playtest_study.py --source-study-pack human_study\study_pack_seed2026 --playtest-pack human_study_playtest\playtest_pack_seed2026
+```
+
+Share `human_study_playtest\playtest_pack_seed2026\playtest_form.html` with
+participants. It logs completion, time, moves, failures, restarts, timeout
+status, and post-level ratings. Do not show `coordinator_notes_private.md` or
+`answer_key_private.csv` to participants.
+
+After exporting playtest responses as CSV, validate and analyze them:
+
+```powershell
+python experiments\validate_playtest_study.py --source-study-pack human_study\study_pack_seed2026 --playtest-pack human_study_playtest\playtest_pack_seed2026 --responses human_study_playtest\responses.csv
+python experiments\analyze_playtest_study.py --responses human_study_playtest\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study_playtest\results_seed2026
+```
+
+The playtest is a simplified grid-navigation proxy, not a faithful
+implementation of Zelda or Lode Runner mechanics.
+
+Legacy self-contained static HTML survey:
+
+```powershell
+python experiments\build_human_study_form.py --study-pack human_study\study_pack_seed2026
+python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
+```
+
+Share only `README_FOR_FORM_BUILDER.md`, `stimuli_manifest_blinded.csv`,
+`stimuli/`, `rating_sheet_template.csv`, and `survey_questions.md` with the
+form builder. If using the HTML route, share `survey_form.html` with
+participants. Do not show `coordinator_notes_private.md` or
+`answer_key_private.csv` to participants.
+
+After exporting responses as CSV, validate and analyze them:
+
+```powershell
+python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026 --responses human_study\responses.csv
+```
+
+```powershell
+python experiments\analyze_human_study.py --responses human_study\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study\results_seed2026
+```
+
+The analysis reports participant-level means, QI-vs-baseline paired
+permutation tests, Holm-adjusted p-values, and Cliff's Delta. Treat results as
+pilot evidence if fewer than 15 participants complete the survey.
+
 ## Expected Full Output
 
 After the full run, check:
@@ -138,6 +246,9 @@ experiments/output_reproduction_seed30/
 - The paper configuration uses seeds 42--71, 9,999 statistical permutations,
   180,000 generated main rows, 12,000 ablation rows, 180,000 budget-sweep rows,
   and 144,000 novelty-sweep rows.
+- The default `novelty` column uses a 2x2 n-gram Jensen-Shannon metric because
+  cell-wise Hamming distance is overly sensitive to spatial shifts. The legacy
+  Hamming value remains available as `novelty_hamming`.
 - The public experiment runner includes optimized sampling and metric code for
   the 30-seed Lode Runner run; keep these optimizations unless replacing them
   with an equivalent validated implementation.

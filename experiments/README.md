@@ -8,9 +8,11 @@ Team-facing run guide:
 
 - `../REPRODUCIBILITY_GUIDE.md`
 
-The current pipeline uses two processed VGLC domains, an 80/20 train-test split,
-six generators, train-reference novelty, seed-level permutation tests,
-Holm-Bonferroni-adjusted p-values, and ablation outputs.
+The current paper pipeline uses two processed VGLC domains, an 80/20 train-test
+split, six generators, train-reference novelty, seed-level permutation tests,
+Holm-Bonferroni-adjusted p-values, and ablation outputs. The runner also
+supports an optional third domain, `mario`, by slicing Super Mario Bros
+processed levels into `14 x 16` platformer windows.
 
 Main final output target:
 
@@ -43,6 +45,10 @@ The fair-budget main configuration uses:
 - optional budget sweep: QI/GA/SA at 8, 16, 24, 32, and 64 fitness evaluations
 - optional novelty sweep: QI/GA/SA at novelty weights 0, 25, 50, and 100
 - reference configuration: `experiments/reproduction_config.json`
+- primary novelty metric: 2x2 n-gram Jensen-Shannon divergence; the legacy
+  cell-wise Hamming metric is still exported as `novelty_hamming`
+- optional third-domain smoke target: `--datasets zelda,loderunner,mario`,
+  `expected-generated=36`, `expected-reference=149`
 
 Content metrics are seeded and should be reproducible with the same dataset and
 commit. `generation_time` is machine-dependent and should be compared as a
@@ -91,4 +97,18 @@ Full final validation command:
 
 ```powershell
 & 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30 --expected-generated 180000 --expected-reference 111 --expected-ablation-rows 12000 --expected-ablation-cell-n 200 --expect-standard-config --skip-paper
+```
+
+Optional three-domain smoke validation:
+
+```powershell
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\run_experiments.py --datasets zelda,loderunner,mario --out-dir experiments\output_mario_domain_smoke --rooms-per-method 2 --seeds 1 --ablation-rooms-per-cell 1 --stat-permutations 19 --skip-ablation
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_outputs.py --out-dir experiments\output_mario_domain_smoke --expected-generated 36 --expected-reference 149 --skip-paper
+```
+
+Optional three-domain full extension:
+
+```powershell
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\run_experiments.py --datasets zelda,loderunner,mario --rooms-per-method 500 --seeds 30 --ablation-rooms-per-cell 200 --stat-permutations 9999 --out-dir experiments\output_reproduction_seed30_mario
+& 'C:\Users\ADMIN\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' experiments\validate_outputs.py --out-dir experiments\output_reproduction_seed30_mario --expected-generated 270000 --expected-reference 149 --expected-ablation-rows 18000 --expected-ablation-cell-n 200 --skip-paper
 ```
