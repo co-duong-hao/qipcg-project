@@ -15,6 +15,10 @@ METRICS = [
     "moves",
     "failures",
     "restarts",
+    "collected_count",
+    "required_collectibles",
+    "optimal_path_length",
+    "efficiency_ratio",
     "difficulty_rating",
     "fun_rating",
     "overall_rating",
@@ -76,7 +80,22 @@ def clean_responses(responses: pd.DataFrame, answer_key: pd.DataFrame) -> pd.Dat
     answer_key = normalize_columns(answer_key)
     require_columns(responses, ["participant_id", "stimulus_id"], "responses")
     require_columns(answer_key, ["stimulus_id", "dataset", "method"], "answer_key")
-    numeric_cols = ["completed", "time_seconds", "moves", "failures", "restarts", "timed_out", "difficulty_rating", "fun_rating", "overall_rating"]
+    numeric_cols = [
+        "completed",
+        "time_seconds",
+        "moves",
+        "failures",
+        "restarts",
+        "timed_out",
+        "collected_count",
+        "required_collectibles",
+        "optimal_path_length",
+        "efficiency_ratio",
+        "timeout_seconds",
+        "difficulty_rating",
+        "fun_rating",
+        "overall_rating",
+    ]
     require_columns(responses, numeric_cols, "responses")
     for col in numeric_cols:
         responses[col] = pd.to_numeric(responses[col], errors="coerce")

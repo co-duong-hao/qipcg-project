@@ -33,6 +33,11 @@ RESPONSE_COLUMNS = [
     "failures",
     "restarts",
     "timed_out",
+    "collected_count",
+    "required_collectibles",
+    "optimal_path_length",
+    "efficiency_ratio",
+    "timeout_seconds",
     "difficulty_rating",
     "fun_rating",
     "overall_rating",
@@ -102,10 +107,23 @@ def validate_responses(args: argparse.Namespace) -> None:
         numeric = pd.to_numeric(responses[col], errors="coerce")
         require(numeric.notna().all(), f"{col} contains non-numeric values")
         require(numeric.isin([0, 1]).all(), f"{col} must contain only 0/1")
-    for col in ["time_seconds", "moves", "failures", "restarts"]:
+    for col in [
+        "time_seconds",
+        "moves",
+        "failures",
+        "restarts",
+        "collected_count",
+        "required_collectibles",
+        "optimal_path_length",
+        "timeout_seconds",
+    ]:
         numeric = pd.to_numeric(responses[col], errors="coerce")
         require(numeric.notna().all(), f"{col} contains non-numeric values")
         require((numeric >= 0).all(), f"{col} contains negative values")
+    efficiency = pd.to_numeric(responses["efficiency_ratio"], errors="coerce")
+    completed = pd.to_numeric(responses["completed"], errors="coerce")
+    require(efficiency[completed == 1].notna().all(), "Completed rows must include efficiency_ratio")
+    require((efficiency.dropna() >= 0).all(), "efficiency_ratio contains negative values")
     for col in ["difficulty_rating", "fun_rating", "overall_rating"]:
         numeric = pd.to_numeric(responses[col], errors="coerce")
         require(numeric.notna().all(), f"{col} contains non-numeric values")

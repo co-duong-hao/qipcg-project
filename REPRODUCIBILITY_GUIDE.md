@@ -152,7 +152,7 @@ The older static visual-rating workflow is preserved under
 Create the blinded pack:
 
 ```powershell
-python experiments\create_human_study_pack.py --input-csv experiments\output_reproduction_seed30\combined_results_detailed.csv --out-dir human_study\study_pack_seed2026
+python experiments\create_human_study_pack.py --input-csv experiments\output_reproduction_seed30\combined_results_detailed.csv --out-dir human_study\study_pack_seed2026 --playtest-ready
 ```
 
 The pack contains public survey materials plus a private answer key:
@@ -160,18 +160,10 @@ The pack contains public survey materials plus a private answer key:
 ```text
 human_study/study_pack_seed2026/
   stimuli/
-  README_FOR_FORM_BUILDER.md
+  README_FOR_PLAYTEST_BUILDER.md
   stimuli_manifest_blinded.csv
-  survey_questions.md
-  rating_sheet_template.csv
   coordinator_notes_private.md
   answer_key_private.csv
-```
-
-Validate the pack before sharing survey materials:
-
-```powershell
-python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
 ```
 
 Build and validate the simplified playable HTML study:
@@ -183,7 +175,8 @@ python experiments\validate_playtest_study.py --source-study-pack human_study\st
 
 Share `human_study_playtest\playtest_pack_seed2026\playtest_form.html` with
 participants. It logs completion, time, moves, failures, restarts, timeout
-status, and post-level ratings. Do not show `coordinator_notes_private.md` or
+status, required collectibles, shortest safe path length, efficiency ratio, and
+post-level ratings. Do not show `coordinator_notes_private.md` or
 `answer_key_private.csv` to participants.
 
 After exporting playtest responses as CSV, validate and analyze them:
@@ -193,35 +186,11 @@ python experiments\validate_playtest_study.py --source-study-pack human_study\st
 python experiments\analyze_playtest_study.py --responses human_study_playtest\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study_playtest\results_seed2026
 ```
 
-The playtest is a simplified grid-navigation proxy, not a faithful
+The playtest is a goal-oriented grid-navigation proxy, not a faithful
 implementation of Zelda or Lode Runner mechanics.
 
-Legacy self-contained static HTML survey:
-
-```powershell
-python experiments\build_human_study_form.py --study-pack human_study\study_pack_seed2026
-python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
-```
-
-Share only `README_FOR_FORM_BUILDER.md`, `stimuli_manifest_blinded.csv`,
-`stimuli/`, `rating_sheet_template.csv`, and `survey_questions.md` with the
-form builder. If using the HTML route, share `survey_form.html` with
-participants. Do not show `coordinator_notes_private.md` or
-`answer_key_private.csv` to participants.
-
-After exporting responses as CSV, validate and analyze them:
-
-```powershell
-python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026 --responses human_study\responses.csv
-```
-
-```powershell
-python experiments\analyze_human_study.py --responses human_study\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study\results_seed2026
-```
-
-The analysis reports participant-level means, QI-vs-baseline paired
-permutation tests, Holm-adjusted p-values, and Cliff's Delta. Treat results as
-pilot evidence if fewer than 15 participants complete the survey.
+The legacy static visual-rating survey is preserved only in
+`human_study_archive/static_perceptual_study_2026-06-26/`.
 
 ## Expected Full Output
 

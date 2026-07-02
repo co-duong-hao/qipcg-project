@@ -223,48 +223,26 @@ python experiments\validate_playtest_study.py --source-study-pack human_study\st
 python experiments\analyze_playtest_study.py --responses human_study_playtest\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study_playtest\results_seed2026
 ```
 
-The playtest is a simplified grid-navigation proxy, not a faithful
+The playtest is a goal-oriented grid-navigation proxy with computed start,
+single final target, required collectibles, hazard penalties, and efficiency
+logging. It is not a faithful
 implementation of Zelda or Lode Runner mechanics.
 
 After a full run exists, create a blinded 24-stimulus pack:
 
 ```powershell
-python experiments\create_human_study_pack.py --input-csv experiments\output_reproduction_seed30\combined_results_detailed.csv --out-dir human_study\study_pack_seed2026
+python experiments\create_human_study_pack.py --input-csv experiments\output_reproduction_seed30\combined_results_detailed.csv --out-dir human_study\study_pack_seed2026 --playtest-ready
 ```
 
-Validate the pack before sending it to anyone:
+Validate the playtest files before sending them to anyone:
 
 ```powershell
-python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
+python experiments\validate_playtest_study.py --source-study-pack human_study\study_pack_seed2026 --playtest-pack human_study_playtest\playtest_pack_seed2026
 ```
 
-Optionally build a self-contained HTML survey form:
-
-```powershell
-python experiments\build_human_study_form.py --study-pack human_study\study_pack_seed2026
-python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026
-```
-
-Give the form builder only `README_FOR_FORM_BUILDER.md`,
-`stimuli_manifest_blinded.csv`, `stimuli/`, `rating_sheet_template.csv`, and
-`survey_questions.md`. If using the HTML route, share `survey_form.html` with
-participants. Do not share `coordinator_notes_private.md` or
-`answer_key_private.csv` until all responses are collected.
-
-After exporting responses as CSV, validate them:
-
-```powershell
-python experiments\validate_human_study.py --study-pack human_study\study_pack_seed2026 --responses human_study\responses.csv
-```
-
-After exporting responses as CSV, analyze them with:
-
-```powershell
-python experiments\analyze_human_study.py --responses human_study\responses.csv --answer-key human_study\study_pack_seed2026\answer_key_private.csv --out-dir human_study\results_seed2026
-```
-
-See `human_study/README.md` for the full protocol. Generated study packs and
-results are local artifacts and are ignored by Git.
+The legacy static visual-rating survey and its scripts are kept only in
+`human_study_archive/static_perceptual_study_2026-06-26/`.
+Generated study packs and results are local artifacts and are ignored by Git.
 
 ## Important Outputs
 
@@ -297,12 +275,9 @@ Primary scripts:
 - experiments/validate_outputs.py: validates generated outputs
 - experiments/generate_vector_figures.py: regenerates vector PDF figures from output CSVs
 - experiments/create_human_study_pack.py: creates a blinded optional mini human-study pack from generated outputs
-- experiments/build_playtest_form.py: creates a self-contained simplified playable HTML study from the blinded pack
+- experiments/build_playtest_form.py: creates a self-contained goal-oriented playable HTML study from the blinded pack
 - experiments/validate_playtest_study.py: validates playtest blinding, pack balance, and response completeness
 - experiments/analyze_playtest_study.py: analyzes exported playtest responses
-- experiments/build_human_study_form.py: creates the legacy self-contained static HTML survey from the blinded pack
-- experiments/validate_human_study.py: validates human-study blinding, stimulus balance, and response completeness
-- experiments/analyze_human_study.py: analyzes exported human-study responses
 - experiments/reproduction_config.json: records the paper reproduction configuration
 
 Current paper context:

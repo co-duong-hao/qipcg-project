@@ -2,7 +2,7 @@
 
 ## Research Question
 
-When participants play generated levels in a simplified grid-navigation task,
+When participants play generated levels in a goal-oriented grid-navigation task,
 do levels from the quantum-inspired generator produce better completion,
 efficiency, failure, difficulty, fun, or overall-quality outcomes than levels
 from GA, positional-prior sampling, and uniform random generation?
@@ -12,6 +12,8 @@ from GA, positional-prior sampling, and uniform random generation?
 - Completion rate (`completed`).
 - Time to completion for completed levels (`time_seconds_completed`).
 - Moves, failures, and restarts.
+- Required collectibles, collected count, shortest safe path length, and
+  movement-efficiency ratio.
 - Post-level difficulty, fun/engagement, and overall quality ratings.
 
 ## Unit Of Analysis
@@ -32,7 +34,6 @@ For each dataset and metric:
 
 ## Interpretation
 
-Interpret the results as a simplified playtest proxy. Strong claims about the
-original commercial game rule sets require a faithful game implementation or a
-separate study.
-
+Interpret the results as a goal-oriented simplified playtest proxy. Strong
+claims about the original commercial game rule sets require a faithful game
+implementation or a separate study.
